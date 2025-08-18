@@ -1,0 +1,52 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+cards/
+venv/
+.env
+*.pyc
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# 编译输出
+/frontend/build
+/frontend/dist
+
+# 日志文件
+*.log
+nohup_*.log
+
+# 数据库
+*.db
+*.sqlite
+
+# 上传文件夹
+uploads/
+output/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 测试覆盖率
+htmlcov/
+.coverage
+.pytest_cache/
+
+# 临时文件
+*.tmp
+*.bak

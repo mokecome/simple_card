@@ -1,0 +1,465 @@
+/* 移動端全屏相機樣式 */
+
+.mobile-camera-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 9999;
+  background: #000;
+  display: flex;
+  flex-direction: column;
+}
+
+.camera-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.camera-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  background: #000;
+}
+
+/* 相機加載狀態 - 簡化版本，移除文字干擾 */
+.camera-loading {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  color: white;
+  z-index: 10;
+}
+
+.loading-spinner {
+  width: 60px; /* 增大加載指示器，補償移除的文字 */
+  height: 60px;
+  border: 4px solid rgba(255, 255, 255, 0.3);
+  border-top: 4px solid #fff;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: 0 auto;
+
+  /* 添加發光效果，增強視覺反饋 */
+  box-shadow: 0 0 20px rgba(255, 255, 255, 0.3);
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* 移除 loading-text 樣式，因為已經不需要 */
+
+/* 拍照指引線 - 擴大移動端拍攝範圍 */
+.camera-guides {
+  position: absolute;
+  top: 3%; /* 從10%大幅減少到3%，顯著增加頂部拍攝範圍 */
+  left: 2%; /* 從5%減少到2%，增加左右拍攝範圍 */
+  right: 2%; /* 從5%減少到2%，增加左右拍攝範圍 */
+  bottom: 8%; /* 從20%大幅減少到8%，顯著增加底部拍攝範圍 */
+  pointer-events: none;
+  z-index: 5;
+
+  /* 移除邊框，改為僅顯示角落指示 */
+  border: none;
+  border-radius: 0;
+  animation: none;
+}
+
+/* 網格線輔助 - 可選顯示 */
+.camera-grid {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  z-index: 4;
+  opacity: 0.3;
+  
+  /* 使用CSS Grid創建九宮格輔助線 */
+  background-image: 
+    linear-gradient(to right, rgba(255, 255, 255, 0.5) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.5) 1px, transparent 1px);
+  background-size: 33.33% 33.33%;
+  background-repeat: repeat;
+}
+
+.camera-grid.hidden {
+  display: none;
+}
+
+@keyframes guidePulse {
+  0%, 100% {
+    border-color: rgba(255, 255, 255, 0.8);
+    transform: scale(1);
+    box-shadow: 0 0 15px rgba(255, 255, 255, 0.3);
+  }
+  50% {
+    border-color: rgba(255, 255, 255, 1);
+    transform: scale(1.02);
+    box-shadow: 0 0 25px rgba(255, 255, 255, 0.5);
+  }
+}
+
+.guide-corner {
+  position: absolute;
+  width: 60px; /* 從50px增加到60px，更清晰的指引 */
+  height: 60px; /* 從50px增加到60px */
+  border: 5px solid rgba(255, 255, 255, 0.95); /* 增加邊框寬度 */
+  border-radius: 6px; /* 增加圓角 */
+
+  /* 增強發光效果和動畫 */
+  box-shadow:
+    0 0 15px rgba(255, 255, 255, 0.4),
+    inset 0 0 15px rgba(255, 255, 255, 0.15);
+  animation: guidePulse 3s ease-in-out infinite;
+}
+
+.guide-corner.top-left {
+  top: 0;
+  left: 0;
+  border-right: none;
+  border-bottom: none;
+}
+
+.guide-corner.top-right {
+  top: 0;
+  right: 0;
+  border-left: none;
+  border-bottom: none;
+}
+
+.guide-corner.bottom-left {
+  bottom: 0;
+  left: 0;
+  border-right: none;
+  border-top: none;
+}
+
+.guide-corner.bottom-right {
+  bottom: 0;
+  right: 0;
+  border-left: none;
+  border-top: none;
+}
+
+/* 拍攝範圍提示 - 更新文字內容 */
+.capture-hint {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  color: rgba(255, 255, 255, 0.9);
+  pointer-events: none;
+  z-index: 6;
+}
+
+.hint-text {
+  font-size: 18px; /* 增大字體 */
+  font-weight: 600;
+  margin-bottom: 6px;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.7);
+  background: rgba(0, 0, 0, 0.4);
+  padding: 8px 16px;
+  border-radius: 20px;
+  backdrop-filter: blur(6px);
+}
+
+.hint-subtext {
+  font-size: 13px; /* 增大字體 */
+  opacity: 0.9;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
+  background: rgba(0, 0, 0, 0.3);
+  padding: 6px 12px;
+  border-radius: 16px;
+  backdrop-filter: blur(4px);
+}
+
+/* 對焦指示器 */
+.focus-indicator {
+  position: absolute;
+  width: 100px;
+  height: 100px;
+  border: 3px solid rgba(255, 255, 255, 0.9);
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 7;
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(1.5);
+  transition: all 0.3s ease;
+}
+
+.focus-indicator.active {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+  animation: focusPulse 0.6s ease-out;
+}
+
+@keyframes focusPulse {
+  0% {
+    transform: translate(-50%, -50%) scale(1.5);
+    opacity: 0;
+  }
+  50% {
+    transform: translate(-50%, -50%) scale(0.8);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+  }
+}
+
+/* 控制按鈕區域 */
+.camera-controls {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.controls-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 20px;
+  pointer-events: auto;
+}
+
+.controls-bottom {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px;
+  pointer-events: auto;
+}
+
+.control-button {
+  width: 52px !important;
+  height: 52px !important;
+  border-radius: 50% !important;
+  background: rgba(0, 0, 0, 0.6) !important;
+  border: 2px solid rgba(255, 255, 255, 0.9) !important;
+  color: white !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  font-size: 22px !important;
+  backdrop-filter: blur(4px) !important;
+}
+
+.control-button:active {
+  background: rgba(0, 0, 0, 0.7) !important;
+}
+
+.close-button {
+  /* 關閉按鈕特殊樣式 */
+}
+
+.switch-button {
+  /* 攝像頭切換按鈕特殊樣式 */
+}
+
+.grid-button {
+  /* 網格線切換按鈕樣式 */
+  background: rgba(0, 0, 0, 0.7) !important;
+}
+
+.grid-button:active {
+  background: rgba(255, 255, 255, 0.2) !important;
+}
+
+/* 拍照區域 */
+.capture-area {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+
+.capture-button {
+  width: 90px !important;
+  height: 90px !important;
+  border-radius: 50% !important;
+  background: rgba(255, 255, 255, 0.95) !important;
+  border: 5px solid #1677ff !important;
+  color: #1677ff !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  font-size: 36px !important;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4) !important;
+}
+
+.capture-button:active {
+  background: rgba(255, 255, 255, 1) !important;
+  transform: scale(0.95);
+}
+
+.capture-button:disabled {
+  opacity: 0.6 !important;
+  transform: none !important;
+}
+
+/* 移除相機信息區域，減少視覺干擾 */
+/* .camera-info 和 .facing-mode-indicator 已移除 */
+
+/* 響應式設計 */
+@media (max-width: 480px) {
+  .controls-top {
+    padding: 16px;
+  }
+
+  .controls-bottom {
+    padding: 16px;
+  }
+
+  .control-button {
+    width: 48px !important;
+    height: 48px !important;
+    font-size: 20px !important;
+  }
+
+  .capture-button {
+    width: 80px !important;
+    height: 80px !important;
+    font-size: 32px !important;
+  }
+
+  .camera-guides {
+    top: 12%; /* 小屏幕上也擴大拍攝範圍 */
+    bottom: 22%; /* 減少底部邊距 */
+    left: 6%; /* 減少左右邊距 */
+    right: 6%; /* 減少左右邊距 */
+  }
+
+  .guide-corner {
+    width: 45px; /* 小屏幕上保持較大的指引角標 */
+    height: 45px;
+    border-width: 3px; /* 保持較粗的邊框 */
+  }
+
+  .hint-text {
+    font-size: 14px; /* 小屏幕上稍小的字體 */
+    padding: 4px 8px;
+  }
+
+  .hint-subtext {
+    font-size: 10px;
+    padding: 2px 6px;
+  }
+}
+
+/* 大屏幕優化 */
+@media (min-width: 768px) {
+  .capture-button {
+    width: 100px !important;
+    height: 100px !important;
+    font-size: 40px !important;
+  }
+
+  .control-button {
+    width: 56px !important;
+    height: 56px !important;
+    font-size: 24px !important;
+  }
+
+  .camera-guides {
+    top: 8%; /* 大屏幕上進一步擴大拍攝範圍 */
+    bottom: 18%; /* 進一步減少底部邊距 */
+    left: 4%; /* 進一步減少左右邊距 */
+    right: 4%; /* 進一步減少左右邊距 */
+  }
+
+  .guide-corner {
+    width: 60px; /* 大屏幕上使用更大的指引角標 */
+    height: 60px;
+    border-width: 5px; /* 更粗的邊框 */
+  }
+
+  .hint-text {
+    font-size: 18px; /* 大屏幕上更大的字體 */
+    padding: 8px 16px;
+  }
+
+  .hint-subtext {
+    font-size: 14px;
+    padding: 6px 12px;
+  }
+}
+
+/* 橫屏適配 */
+@media (orientation: landscape) {
+  .camera-guides {
+    top: 10%;
+    bottom: 20%;
+    left: 15%;
+    right: 15%;
+  }
+  
+  .controls-top {
+    padding: 16px 20px;
+  }
+  
+  .controls-bottom {
+    padding: 16px 20px;
+  }
+}
+
+/* 動畫效果 */
+.mobile-camera-modal {
+  animation: fadeIn 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.capture-button {
+  transition: all 0.2s ease;
+}
+
+.control-button {
+  transition: all 0.2s ease;
+}
+
+/* 確保在所有設備上的兼容性 */
+.camera-video {
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+}
+
+/* iOS Safari 特殊處理 */
+@supports (-webkit-appearance: none) {
+  .mobile-camera-modal {
+    /* iOS Safari 全屏處理 */
+    height: 100vh;
+    height: -webkit-fill-available;
+  }
+  
+  .camera-container {
+    height: 100vh;
+    height: -webkit-fill-available;
+  }
+}
