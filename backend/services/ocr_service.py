@@ -18,6 +18,7 @@ import base64
 from openai import OpenAI
 from typing import Dict, Any, Optional, List
 from collections import OrderedDict
+from .card_detector import CardDetector
 
 # 禁用 SSL 警告
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -765,8 +766,28 @@ No. 7, Sec. 5, Xinyi Rd., Xinyi Dist., Taipei City
 ※ 這是模擬OCR識別結果，實際使用時需要配置OCR服務"""
 
 def process_image(image_path):
-    """處理圖像，提高OCR識別率"""
+    """處理圖像，提高OCR識別率 - 整合OpenCV智能處理"""
     try:
+        # 優先使用OpenCV處理
+        use_opencv = os.getenv("USE_OPENCV", "true").lower() == "true"
+        
+        if use_opencv:
+            try:
+                # 使用OpenCV名片檢測器
+                detector = CardDetector()
+                success, enhanced_path = detector.process_card_image(image_path)
+                
+                if success:
+                    print(f"OpenCV處理成功: {enhanced_path}")
+                    return enhanced_path
+                else:
+                    print(f"OpenCV處理失敗，回退到傳統方法: {enhanced_path}")
+                    # 繼續使用傳統方法
+            except Exception as opencv_error:
+                print(f"OpenCV處理異常，回退到傳統方法: {opencv_error}")
+                # 繼續使用傳統方法
+        
+        # 傳統PIL處理方法（作為備用）
         with open(image_path, "rb") as f:
             image_data = f.read()
         image = Image.open(BytesIO(image_data))
@@ -782,12 +803,12 @@ def process_image(image_path):
             return image_path
 
         # 圖像增強：放大圖像以提高清晰度
-        scale_factor = 1.2
+        scale_factor = 1.5  # 提高放大倍率
         new_width = int(image.width * scale_factor)
         new_height = int(image.height * scale_factor)
         enhanced_image = image.resize((new_width, new_height), Image.LANCZOS)
         enhanced_path = os.path.splitext(image_path)[0] + "_enhanced.jpg"
-        enhanced_image.save(enhanced_path, "JPEG", dpi=(150, 150))
+        enhanced_image.save(enhanced_path, "JPEG", quality=95, dpi=(200, 200))  # 提高質量和DPI
         return enhanced_path
     except Exception as e:
         print(f"圖像處理錯誤: {e}")
