@@ -761,7 +761,7 @@ const CardManagerPage = () => {
       <div className="content" style={{ padding: '16px' }}>
         {/* 搜索欄 */}
         <SearchBar
-          placeholder="搜索名片（姓名、公司、電話、郵箱）"
+          placeholder="搜索名片（姓名、公司、職稱、電話、郵箱）支援中英文"
           value={searchText}
           onChange={setSearchText}
           style={{ marginBottom: '16px' }}

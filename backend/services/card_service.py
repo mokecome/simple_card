@@ -34,11 +34,21 @@ def get_cards_paginated(
     """分頁獲取名片，支持搜索和過濾"""
     query = db.query(CardORM)
     
-    # 搜索過濾
+    # 搜索過濾 - 支援姓名、公司、職稱的中英文搜索
     if search:
         search_filter = or_(
+            # 姓名搜索 (中英文)
             CardORM.name.contains(search),
+            CardORM.name_en.contains(search),
+            # 公司搜索 (中英文)
             CardORM.company_name.contains(search),
+            CardORM.company_name_en.contains(search),
+            # 職稱搜索 (中英文，支援兩個職稱欄位)
+            CardORM.position.contains(search),
+            CardORM.position_en.contains(search),
+            CardORM.position1.contains(search),
+            CardORM.position1_en.contains(search),
+            # 聯絡資訊搜索
             CardORM.mobile_phone.contains(search),
             CardORM.email.contains(search)
         )
@@ -180,8 +190,18 @@ def get_cards_count(db: Session, search: Optional[str] = None) -> int:
     
     if search:
         search_filter = or_(
+            # 姓名搜索 (中英文)
             CardORM.name.contains(search),
+            CardORM.name_en.contains(search),
+            # 公司搜索 (中英文)
             CardORM.company_name.contains(search),
+            CardORM.company_name_en.contains(search),
+            # 職稱搜索 (中英文，支援兩個職稱欄位)
+            CardORM.position.contains(search),
+            CardORM.position_en.contains(search),
+            CardORM.position1.contains(search),
+            CardORM.position1_en.contains(search),
+            # 聯絡資訊搜索
             CardORM.mobile_phone.contains(search),
             CardORM.email.contains(search)
         )
