@@ -84,14 +84,14 @@ const CardManagerPage = () => {
     const missingFields = [];
     
     // 檢查姓名 (中文 OR 英文)
-    const name_zh = card.name?.trim() || '';
+    const name_zh = card.name_zh?.trim() || '';
     const name_en = card.name_en?.trim() || '';
     if (!name_zh && !name_en) {
       missingFields.push('姓名/英文姓名');
     }
     
     // 檢查公司名稱 (中文 OR 英文)
-    const company_zh = card.company_name?.trim() || '';
+    const company_zh = card.company_name_zh?.trim() || '';
     const company_en = card.company_name_en?.trim() || '';
     if (!company_zh && !company_en) {
       missingFields.push('公司名稱/英文公司名稱');
@@ -99,18 +99,18 @@ const CardManagerPage = () => {
     
     // 檢查職位或部門 (職位或部門有其中一個即可)
     // 檢查職位
-    const position_zh = card.position?.trim() || '';
+    const position_zh = card.position_zh?.trim() || '';
     const position_en = card.position_en?.trim() || '';
-    const position1_zh = card.position1?.trim() || '';
+    const position1_zh = card.position1_zh?.trim() || '';
     const position1_en = card.position1_en?.trim() || '';
     const hasPosition = !!(position_zh || position_en || position1_zh || position1_en);
     
     // 檢查部門
-    const dept1_zh = card.department1?.trim() || '';
+    const dept1_zh = card.department1_zh?.trim() || '';
     const dept1_en = card.department1_en?.trim() || '';
-    const dept2_zh = card.department2?.trim() || '';
+    const dept2_zh = card.department2_zh?.trim() || '';
     const dept2_en = card.department2_en?.trim() || '';
-    const dept3_zh = card.department3?.trim() || '';
+    const dept3_zh = card.department3_zh?.trim() || '';
     const dept3_en = card.department3_en?.trim() || '';
     const hasDepartment = !!(dept1_zh || dept1_en || dept2_zh || dept2_en || dept3_zh || dept3_en);
     
@@ -217,7 +217,7 @@ const CardManagerPage = () => {
     return cards.filter(card => {
       // 中文姓名篩選
       if (advancedFilters.name_zh && 
-          !(card.name && card.name.toLowerCase().includes(advancedFilters.name_zh.toLowerCase()))) {
+          !(card.name_zh && card.name_zh.toLowerCase().includes(advancedFilters.name_zh.toLowerCase()))) {
         return false;
       }
 
@@ -229,16 +229,16 @@ const CardManagerPage = () => {
 
       // 公司篩選
       if (advancedFilters.company && 
-          !((card.company_name && card.company_name.toLowerCase().includes(advancedFilters.company.toLowerCase())) ||
+          !((card.company_name_zh && card.company_name_zh.toLowerCase().includes(advancedFilters.company.toLowerCase())) ||
             (card.company_name_en && card.company_name_en.toLowerCase().includes(advancedFilters.company.toLowerCase())))) {
         return false;
       }
 
       // 職位篩選
       if (advancedFilters.position && 
-          !((card.position && card.position.toLowerCase().includes(advancedFilters.position.toLowerCase())) ||
+          !((card.position_zh && card.position_zh.toLowerCase().includes(advancedFilters.position.toLowerCase())) ||
             (card.position_en && card.position_en.toLowerCase().includes(advancedFilters.position.toLowerCase())) ||
-            (card.position1 && card.position1.toLowerCase().includes(advancedFilters.position.toLowerCase())) ||
+            (card.position1_zh && card.position1_zh.toLowerCase().includes(advancedFilters.position.toLowerCase())) ||
             (card.position1_en && card.position1_en.toLowerCase().includes(advancedFilters.position.toLowerCase())))) {
         return false;
       }
@@ -269,10 +269,10 @@ const CardManagerPage = () => {
         return false;
       }
 
-      if (advancedFilters.hasAddress === true && !(card.company_address1 || card.company_address2)) {
+      if (advancedFilters.hasAddress === true && !(card.company_address1_zh || card.company_address2_zh)) {
         return false;
       }
-      if (advancedFilters.hasAddress === false && (card.company_address1 || card.company_address2)) {
+      if (advancedFilters.hasAddress === false && (card.company_address1_zh || card.company_address2_zh)) {
         return false;
       }
 
@@ -611,16 +611,16 @@ const CardManagerPage = () => {
             <UserContactOutline style={{ color: '#1890ff' }} />
             <div>
               <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#262626' }}>
-                <HighlightText text={card.name || '未知姓名'} keyword={searchText} />
+                <HighlightText text={card.name_zh || '未知姓名'} keyword={searchText} />
                 {card.name_en && (
                   <span style={{ fontSize: '14px', color: '#666', marginLeft: '8px' }}>
                     (<HighlightText text={card.name_en} keyword={searchText} />)
                   </span>
                 )}
               </div>
-              {card.company_name && (
+              {card.company_name_zh && (
                 <div style={{ fontSize: '14px', color: '#8c8c8c' }}>
-                  <HighlightText text={card.company_name} keyword={searchText} />
+                  <HighlightText text={card.company_name_zh} keyword={searchText} />
                   {card.company_name_en && (
                     <span style={{ fontSize: '12px', color: '#999', marginLeft: '6px' }}>
                       (<HighlightText text={card.company_name_en} keyword={searchText} />)
@@ -631,21 +631,21 @@ const CardManagerPage = () => {
             </div>
           </div>
           <div style={{ marginTop: '4px' }}>
-            {card.position && (
+            {card.position_zh && (
               <Tag color="blue" style={{ marginRight: '4px' }}>
-                職位1: <HighlightText text={card.position} keyword={searchText} />
+                職位1: <HighlightText text={card.position_zh} keyword={searchText} />
               </Tag>
             )}
-            {card.position1 && (
+            {card.position1_zh && (
               <Tag color="blue">
-                職位2: <HighlightText text={card.position1} keyword={searchText} />
+                職位2: <HighlightText text={card.position1_zh} keyword={searchText} />
               </Tag>
             )}
           </div>
-          {(card.department1 || card.department2 || card.department3) && (
+          {(card.department1_zh || card.department2_zh || card.department3_zh) && (
             <div style={{ marginTop: '4px', fontSize: '13px', color: '#666' }}>
               <HighlightText 
-                text={[card.department1, card.department2, card.department3]
+                text={[card.department1_zh, card.department2_zh, card.department3_zh]
                   .filter(Boolean)
                   .join(' / ')} 
                 keyword={searchText} 
@@ -688,13 +688,13 @@ const CardManagerPage = () => {
               </span>
             </div>
           )}
-          {(card.company_address1 || card.company_address2) && (
+          {(card.company_address1_zh || card.company_address2_zh) && (
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', marginBottom: '4px' }}>
               <EnvironmentOutline style={{ color: '#eb2f96', fontSize: '14px', marginTop: '2px' }} />
               <div style={{ fontSize: '14px', lineHeight: '1.4' }}>
-                <HighlightText text={card.company_address1} keyword={searchText} />
-                {card.company_address2 && (
-                  <div><HighlightText text={card.company_address2} keyword={searchText} /></div>
+                <HighlightText text={card.company_address1_zh} keyword={searchText} />
+                {card.company_address2_zh && (
+                  <div><HighlightText text={card.company_address2_zh} keyword={searchText} /></div>
                 )}
               </div>
             </div>
