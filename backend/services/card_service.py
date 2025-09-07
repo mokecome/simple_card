@@ -38,15 +38,15 @@ def get_cards_paginated(
     if search:
         search_filter = or_(
             # 姓名搜索 (中英文)
-            CardORM.name.contains(search),
+            CardORM.name_zh.contains(search),
             CardORM.name_en.contains(search),
             # 公司搜索 (中英文)
-            CardORM.company_name.contains(search),
+            CardORM.company_name_zh.contains(search),
             CardORM.company_name_en.contains(search),
             # 職稱搜索 (中英文，支援兩個職稱欄位)
-            CardORM.position.contains(search),
+            CardORM.position_zh.contains(search),
             CardORM.position_en.contains(search),
-            CardORM.position1.contains(search),
+            CardORM.position1_zh.contains(search),
             CardORM.position1_en.contains(search),
             # 聯絡資訊搜索
             CardORM.mobile_phone.contains(search),
@@ -191,15 +191,15 @@ def get_cards_count(db: Session, search: Optional[str] = None) -> int:
     if search:
         search_filter = or_(
             # 姓名搜索 (中英文)
-            CardORM.name.contains(search),
+            CardORM.name_zh.contains(search),
             CardORM.name_en.contains(search),
             # 公司搜索 (中英文)
-            CardORM.company_name.contains(search),
+            CardORM.company_name_zh.contains(search),
             CardORM.company_name_en.contains(search),
             # 職稱搜索 (中英文，支援兩個職稱欄位)
-            CardORM.position.contains(search),
+            CardORM.position_zh.contains(search),
             CardORM.position_en.contains(search),
-            CardORM.position1.contains(search),
+            CardORM.position1_zh.contains(search),
             CardORM.position1_en.contains(search),
             # 聯絡資訊搜索
             CardORM.mobile_phone.contains(search),

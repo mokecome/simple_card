@@ -86,29 +86,29 @@ def get_cards_stats(db: Session = Depends(get_db)):
             missing_fields = []
             
             # 檢查姓名 (中文OR英文)
-            name_zh = card.get('name', '').strip() if card.get('name') else ''
+            name_zh = card.get('name_zh', '').strip() if card.get('name_zh') else ''
             name_en = card.get('name_en', '').strip() if card.get('name_en') else ''
             if not (name_zh or name_en):
                 missing_fields.append('姓名')
             
             # 檢查公司 (中文OR英文)
-            company_zh = card.get('company_name', '').strip() if card.get('company_name') else ''
+            company_zh = card.get('company_name_zh', '').strip() if card.get('company_name_zh') else ''
             company_en = card.get('company_name_en', '').strip() if card.get('company_name_en') else ''
             if not (company_zh or company_en):
                 missing_fields.append('公司')
             
             # 檢查職位或部門 (職位或部門有其中一個即可)
-            position_zh = card.get('position', '').strip() if card.get('position') else ''
+            position_zh = card.get('position_zh', '').strip() if card.get('position_zh') else ''
             position_en = card.get('position_en', '').strip() if card.get('position_en') else ''
-            position1_zh = card.get('position1', '').strip() if card.get('position1') else ''
+            position1_zh = card.get('position1_zh', '').strip() if card.get('position1_zh') else ''
             position1_en = card.get('position1_en', '').strip() if card.get('position1_en') else ''
             has_position = bool(position_zh or position_en or position1_zh or position1_en)
             
-            dept1_zh = card.get('department1', '').strip() if card.get('department1') else ''
+            dept1_zh = card.get('department1_zh', '').strip() if card.get('department1_zh') else ''
             dept1_en = card.get('department1_en', '').strip() if card.get('department1_en') else ''
-            dept2_zh = card.get('department2', '').strip() if card.get('department2') else ''
+            dept2_zh = card.get('department2_zh', '').strip() if card.get('department2_zh') else ''
             dept2_en = card.get('department2_en', '').strip() if card.get('department2_en') else ''
-            dept3_zh = card.get('department3', '').strip() if card.get('department3') else ''
+            dept3_zh = card.get('department3_zh', '').strip() if card.get('department3_zh') else ''
             dept3_en = card.get('department3_en', '').strip() if card.get('department3_en') else ''
             has_department = bool(dept1_zh or dept1_en or dept2_zh or dept2_en or dept3_zh or dept3_en)
             
@@ -196,34 +196,36 @@ def read_card(card_id: int, db: Session = Depends(get_db)):
 @router.post("/")
 async def add_card(
     # 基本資訊（中英文）
-    name: str = Form(...),
+    name_zh: str = Form(...),
     name_en: Optional[str] = Form(None),
-    company_name: Optional[str] = Form(None),
+    company_name_zh: Optional[str] = Form(None),
     company_name_en: Optional[str] = Form(None),
-    position: Optional[str] = Form(None),
+    position_zh: Optional[str] = Form(None),
     position_en: Optional[str] = Form(None),
-    position1: Optional[str] = Form(None),
+    position1_zh: Optional[str] = Form(None),
     position1_en: Optional[str] = Form(None),
     
     # 部門組織架構（中英文，三層）
-    department1: Optional[str] = Form(None),
+    department1_zh: Optional[str] = Form(None),
     department1_en: Optional[str] = Form(None),
-    department2: Optional[str] = Form(None),
+    department2_zh: Optional[str] = Form(None),
     department2_en: Optional[str] = Form(None),
-    department3: Optional[str] = Form(None),
+    department3_zh: Optional[str] = Form(None),
     department3_en: Optional[str] = Form(None),
     
     # 聯絡資訊
     mobile_phone: Optional[str] = Form(None),
     company_phone1: Optional[str] = Form(None),
     company_phone2: Optional[str] = Form(None),
+    fax: Optional[str] = Form(None),
     email: Optional[str] = Form(None),
     line_id: Optional[str] = Form(None),
+    wechat_id: Optional[str] = Form(None),
     
     # 地址資訊（中英文）
-    company_address1: Optional[str] = Form(None),
+    company_address1_zh: Optional[str] = Form(None),
     company_address1_en: Optional[str] = Form(None),
-    company_address2: Optional[str] = Form(None),
+    company_address2_zh: Optional[str] = Form(None),
     company_address2_en: Optional[str] = Form(None),
     
     # 備註資訊
@@ -264,28 +266,30 @@ async def add_card(
         
         # 創建名片數據對象
         card_data = Card(
-            name=name,
+            name_zh=name_zh,
             name_en=name_en,
-            company_name=company_name,
+            company_name_zh=company_name_zh,
             company_name_en=company_name_en,
-            position=position,
+            position_zh=position_zh,
             position_en=position_en,
-            position1=position1,
+            position1_zh=position1_zh,
             position1_en=position1_en,
-            department1=department1,
+            department1_zh=department1_zh,
             department1_en=department1_en,
-            department2=department2,
+            department2_zh=department2_zh,
             department2_en=department2_en,
-            department3=department3,
+            department3_zh=department3_zh,
             department3_en=department3_en,
             mobile_phone=mobile_phone,
             company_phone1=company_phone1,
             company_phone2=company_phone2,
+            fax=fax,
             email=email,
             line_id=line_id,
-            company_address1=company_address1,
+            wechat_id=wechat_id,
+            company_address1_zh=company_address1_zh,
             company_address1_en=company_address1_en,
-            company_address2=company_address2,
+            company_address2_zh=company_address2_zh,
             company_address2_en=company_address2_en,
             note1=note1,
             note2=note2,
@@ -314,34 +318,36 @@ async def add_card(
 async def edit_card(
     card_id: int,
     # 基本資訊（中英文） - 修復：使用空字符串作為默認值以支持清空欄位
-    name: str = Form(...),
+    name_zh: str = Form(...),
     name_en: str = Form(""),
-    company_name: str = Form(""),
+    company_name_zh: str = Form(""),
     company_name_en: str = Form(""),
-    position: str = Form(""),
+    position_zh: str = Form(""),
     position_en: str = Form(""),
-    position1: str = Form(""),
+    position1_zh: str = Form(""),
     position1_en: str = Form(""),
     
     # 部門組織架構（中英文，三層）
-    department1: str = Form(""),
+    department1_zh: str = Form(""),
     department1_en: str = Form(""),
-    department2: str = Form(""),
+    department2_zh: str = Form(""),
     department2_en: str = Form(""),
-    department3: str = Form(""),
+    department3_zh: str = Form(""),
     department3_en: str = Form(""),
     
     # 聯絡資訊
     mobile_phone: str = Form(""),
     company_phone1: str = Form(""),
     company_phone2: str = Form(""),
+    fax: str = Form(""),
     email: str = Form(""),
     line_id: str = Form(""),
+    wechat_id: str = Form(""),
     
     # 地址資訊（中英文）
-    company_address1: str = Form(""),
+    company_address1_zh: str = Form(""),
     company_address1_en: str = Form(""),
-    company_address2: str = Form(""),
+    company_address2_zh: str = Form(""),
     company_address2_en: str = Form(""),
     
     # 備註資訊
@@ -391,28 +397,30 @@ async def edit_card(
         # 創建名片更新數據對象
         card_data = Card(
             id=card_id,
-            name=name,
+            name_zh=name_zh,
             name_en=name_en,
-            company_name=company_name,
+            company_name_zh=company_name_zh,
             company_name_en=company_name_en,
-            position=position,
+            position_zh=position_zh,
             position_en=position_en,
-            position1=position1,
+            position1_zh=position1_zh,
             position1_en=position1_en,
-            department1=department1,
+            department1_zh=department1_zh,
             department1_en=department1_en,
-            department2=department2,
+            department2_zh=department2_zh,
             department2_en=department2_en,
-            department3=department3,
+            department3_zh=department3_zh,
             department3_en=department3_en,
             mobile_phone=mobile_phone,
             company_phone1=company_phone1,
             company_phone2=company_phone2,
+            fax=fax,
             email=email,
             line_id=line_id,
-            company_address1=company_address1,
+            wechat_id=wechat_id,
+            company_address1_zh=company_address1_zh,
             company_address1_en=company_address1_en,
-            company_address2=company_address2,
+            company_address2_zh=company_address2_zh,
             company_address2_en=company_address2_en,
             note1=note1,
             note2=note2,
@@ -530,17 +538,17 @@ def export_cards(format: str = Query("csv", enum=["csv", "excel", "vcard"]), db:
             ])
             for card in cards:
                 writer.writerow([
-                    card.get('name', '') or "",
-                    card.get('company_name', '') or "",
-                    card.get('position', '') or "",
-                    card.get('department1', '') or "",
+                    card.get('name_zh', '') or "",
+                    card.get('company_name_zh', '') or "",
+                    card.get('position_zh', '') or "",
+                    card.get('department1_zh', '') or "",
                     card.get('mobile_phone', '') or "",
                     card.get('company_phone1', '') or "",
                     card.get('email', '') or "",
                     card.get('line_id', '') or "",
                     card.get('note1', '') or "",
-                    card.get('company_address1', '') or "",
-                    card.get('company_address2', '') or ""
+                    card.get('company_address1_zh', '') or "",
+                    card.get('company_address2_zh', '') or ""
                 ])
             output.seek(0)
             content = output.getvalue().encode('utf-8-sig')  # 添加BOM以支持中文
@@ -570,17 +578,17 @@ def export_cards(format: str = Query("csv", enum=["csv", "excel", "vcard"]), db:
                 # 添加數據
                 for card in cards:
                     ws.append([
-                        card.get('name', '') or "",
-                        card.get('company_name', '') or "",
-                        card.get('position', '') or "",
-                        card.get('department1', '') or "",
+                        card.get('name_zh', '') or "",
+                        card.get('company_name_zh', '') or "",
+                        card.get('position_zh', '') or "",
+                        card.get('department1_zh', '') or "",
                         card.get('mobile_phone', '') or "",
                         card.get('company_phone1', '') or "",
                         card.get('email', '') or "",
                         card.get('line_id', '') or "",
                         card.get('note1', '') or "",
-                        card.get('company_address1', '') or "",
-                        card.get('company_address2', '') or ""
+                        card.get('company_address1_zh', '') or "",
+                        card.get('company_address2_zh', '') or ""
                     ])
                 
                 # 自動調整列寬
@@ -619,22 +627,22 @@ def export_cards(format: str = Query("csv", enum=["csv", "excel", "vcard"]), db:
             output = io.StringIO()
             for card in cards:
                 output.write(f"BEGIN:VCARD\nVERSION:3.0\n")
-                if card.get('name'):
-                    output.write(f"FN:{card.get('name')}\n")
-                if card.get('company_name'):
-                    output.write(f"ORG:{card.get('company_name')}\n")
-                if card.get('position'):
-                    output.write(f"TITLE:{card.get('position')}\n")
+                if card.get('name_zh'):
+                    output.write(f"FN:{card.get('name_zh')}\n")
+                if card.get('company_name_zh'):
+                    output.write(f"ORG:{card.get('company_name_zh')}\n")
+                if card.get('position_zh'):
+                    output.write(f"TITLE:{card.get('position_zh')}\n")
                 if card.get('company_phone1'):
                     output.write(f"TEL;TYPE=WORK,VOICE:{card.get('company_phone1')}\n")
                 if card.get('mobile_phone'):
                     output.write(f"TEL;TYPE=CELL:{card.get('mobile_phone')}\n")
                 if card.get('email'):
                     output.write(f"EMAIL;TYPE=INTERNET:{card.get('email')}\n")
-                if card.get('company_address1'):
-                    address = card.get('company_address1')
-                    if card.get('company_address2'):
-                        address += f" {card.get('company_address2')}"
+                if card.get('company_address1_zh'):
+                    address = card.get('company_address1_zh')
+                    if card.get('company_address2_zh'):
+                        address += f" {card.get('company_address2_zh')}"
                     output.write(f"ADR;TYPE=WORK:;;{address};;;;\n")
                 output.write("END:VCARD\n")
             output.seek(0)
@@ -721,13 +729,12 @@ async def batch_import_cards(db: Session = Depends(get_db)):
                         continue
                     
                     # 檢查必要欄位
-                    name = ocr_result.get('姓名', '').strip()
-                    if not name:
+                    name_zh = ocr_result.get('name_zh', '').strip()
+                    if not name_zh:
                         # 如果沒有姓名，嘗試使用文件名作為姓名
                         filename = os.path.basename(image_file)
-                        name = os.path.splitext(filename)[0]
-                        ocr_result['姓名'] = name
-                        logger.info(f"使用文件名作為姓名: {name}")
+                        name_zh = os.path.splitext(filename)[0]
+                        logger.info(f"使用文件名作為姓名: {name_zh}")
                     
                     # 複製圖片到正式存儲位置
                     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -736,33 +743,35 @@ async def batch_import_cards(db: Session = Depends(get_db)):
                     new_image_path = os.path.join(UPLOAD_DIR, new_filename)
                     shutil.copy2(image_file, new_image_path)
                 
-                    # 創建名片記錄，使用OCRService的標準欄位映射
+                    # 直接使用OCR結果的標準化格式
                     card_data = Card(
-                        name=ocr_result.get('姓名', name),
+                        name_zh=name_zh,
                         name_en=ocr_result.get('name_en', ''),
-                        company_name=ocr_result.get('公司名稱', ''),
+                        company_name_zh=ocr_result.get('company_name_zh', ''),
                         company_name_en=ocr_result.get('company_name_en', ''),
-                        position=ocr_result.get('職位', '') or ocr_result.get('職位1', ''),
+                        position_zh=ocr_result.get('position_zh', ''),
                         position_en=ocr_result.get('position_en', ''),
-                        position1=ocr_result.get('職位1', ''),
+                        position1_zh=ocr_result.get('position1_zh', ''),
                         position1_en=ocr_result.get('position1_en', ''),
-                        department1=ocr_result.get('部門1', ''),
-                        department1_en=ocr_result.get('Department1', ''),
-                        department2=ocr_result.get('部門2', ''),
-                        department2_en=ocr_result.get('Department2', ''),
-                        department3=ocr_result.get('部門3', ''),
-                        department3_en=ocr_result.get('Department3', ''),
-                        mobile_phone=ocr_result.get('手機', ''),
-                        company_phone1=ocr_result.get('公司電話1', ''),
-                        company_phone2=ocr_result.get('公司電話2', ''),
-                        email=ocr_result.get('Email', ''),
-                        line_id=ocr_result.get('Line ID', ''),
-                        company_address1=ocr_result.get('公司地址一', ''),
+                        department1_zh=ocr_result.get('department1_zh', ''),
+                        department1_en=ocr_result.get('department1_en', ''),
+                        department2_zh=ocr_result.get('department2_zh', ''),
+                        department2_en=ocr_result.get('department2_en', ''),
+                        department3_zh=ocr_result.get('department3_zh', ''),
+                        department3_en=ocr_result.get('department3_en', ''),
+                        mobile_phone=ocr_result.get('mobile_phone', ''),
+                        company_phone1=ocr_result.get('company_phone1', ''),
+                        company_phone2=ocr_result.get('company_phone2', ''),
+                        fax=ocr_result.get('fax', ''),
+                        email=ocr_result.get('email', ''),
+                        line_id=ocr_result.get('line_id', ''),
+                        wechat_id=ocr_result.get('wechat_id', ''),
+                        company_address1_zh=ocr_result.get('company_address1_zh', ''),
                         company_address1_en=ocr_result.get('company_address1_en', ''),
-                        company_address2=ocr_result.get('公司地址二', ''),
+                        company_address2_zh=ocr_result.get('company_address2_zh', ''),
                         company_address2_en=ocr_result.get('company_address2_en', ''),
-                        note1=ocr_result.get('note1', f'智能批量導入 - {filename}'),
-                        note2=ocr_result.get('note2', f'增強處理+OCR識別，字段數: {len(ocr_result)}'),
+                        note1=f'智能批量導入 - {filename}',
+                        note2=f'標準化欄位+OCR識別，字段數: {len(ocr_result)}',
                         front_image_path=new_image_path,
                         front_ocr_text=json.dumps(ocr_result, ensure_ascii=False)
                     )
@@ -770,7 +779,7 @@ async def batch_import_cards(db: Session = Depends(get_db)):
                     # 保存到數據庫
                     created_card = create_card(db, card_data)
                     success_count += 1
-                    logger.info(f"成功創建名片: {created_card.get('name', '未知')} (ID: {created_card.get('id', '未知')})")
+                    logger.info(f"成功創建名片: {created_card.get('name_zh', '未知')} (ID: {created_card.get('id', '未知')})")
                     
                 except Exception as e:
                     error_msg = f"{os.path.basename(image_file)}: {str(e)}"
@@ -868,35 +877,35 @@ async def text_import_cards(file: UploadFile = File(...), db: Session = Depends(
             
             # 檢查重要欄位缺失和去重
             def check_required_fields(record_data):
-                """檢查重要欄位缺失 - 中英文任一有值即視為完整"""
+                """檢查重要欄位缺失"""
                 missing_fields = []
                 
                 # 檢查姓名 (中文 OR 英文)
-                name_zh = record_data.get('姓名', '').strip()
+                name_zh = record_data.get('name_zh', '').strip()
                 name_en = record_data.get('name_en', '').strip()
                 if not (name_zh or name_en):
                     missing_fields.append('姓名/name_en')
                 
                 # 檢查公司名稱 (中文 OR 英文)
-                company_zh = record_data.get('公司名稱', '').strip()
+                company_zh = record_data.get('company_name_zh', '').strip()
                 company_en = record_data.get('company_name_en', '').strip()
                 if not (company_zh or company_en):
                     missing_fields.append('公司名稱/company_name_en')
                 
                 # 檢查職位或部門 (職位或部門有其中一個即可)
                 # 檢查職位
-                position_zh = record_data.get('職位', '').strip()
+                position_zh = record_data.get('position_zh', '').strip()
                 position_en = record_data.get('position_en', '').strip()
-                position1_zh = record_data.get('職位1', '').strip()
+                position1_zh = record_data.get('position1_zh', '').strip()
                 position1_en = record_data.get('position1_en', '').strip()
                 has_position = bool(position_zh or position_en or position1_zh or position1_en)
                 
                 # 檢查部門
-                dept1_zh = record_data.get('部門1', '').strip()
+                dept1_zh = record_data.get('department1_zh', '').strip()
                 dept1_en = record_data.get('department1_en', '').strip()
-                dept2_zh = record_data.get('部門2', '').strip()
+                dept2_zh = record_data.get('department2_zh', '').strip()
                 dept2_en = record_data.get('department2_en', '').strip()
-                dept3_zh = record_data.get('部門3', '').strip()
+                dept3_zh = record_data.get('department3_zh', '').strip()
                 dept3_en = record_data.get('department3_en', '').strip()
                 has_department = bool(dept1_zh or dept1_en or dept2_zh or dept2_en or dept3_zh or dept3_en)
                 
@@ -905,9 +914,9 @@ async def text_import_cards(file: UploadFile = File(...), db: Session = Depends(
                     missing_fields.append('職位或部門')
                 
                 # 檢查聯絡方式 (手機 OR 公司電話 OR Email OR Line ID，至少要有一個)
-                mobile = record_data.get('手機', '').strip()
-                phone1 = record_data.get('公司電話1', '').strip()
-                phone2 = record_data.get('公司電話2', '').strip()
+                mobile = record_data.get('mobile_phone', '').strip()
+                phone1 = record_data.get('company_phone1', '').strip()
+                phone2 = record_data.get('company_phone2', '').strip()
                 email = record_data.get('email', '').strip()
                 line_id = record_data.get('line_id', '').strip()
                 if not (mobile or phone1 or phone2 or email or line_id):
@@ -915,31 +924,30 @@ async def text_import_cards(file: UploadFile = File(...), db: Session = Depends(
                 
                 return missing_fields
             
-            # 優化重複檢查：預先載入所有現有名片，避免重複查詢
+            # 建立現有名片緩存
             existing_cards_cache = {}
             all_existing_cards = get_cards(db)
             for existing_card in all_existing_cards:
-                # 創建複合鍵用於快速比對
-                key = f"{existing_card.get('name', '')}|{existing_card.get('company_name', '')}|{existing_card.get('mobile_phone', '')}"
+                key = f"{existing_card.get('name_zh', '')}|{existing_card.get('company_name_zh', '')}|{existing_card.get('mobile_phone', '')}"
                 existing_cards_cache[key] = existing_card
             
             def is_duplicate_card(record_data):
-                """檢查是否為重複名片 - 使用緩存避免重複查詢"""
-                key = f"{record_data.get('姓名', '')}|{record_data.get('公司名稱', '')}|{record_data.get('手機', '')}"
+                """檢查是否為重複名片"""
+                key = f"{record_data.get('name_zh', '')}|{record_data.get('company_name_zh', '')}|{record_data.get('mobile_phone', '')}"
                 return key in existing_cards_cache
 
-            # 批量創建名片記錄 - 優化版本
+            # 批量處理名片
             duplicate_count = 0
             problem_count = 0
-            cards_to_create = []  # 準備批量創建的名片
-            batch_size = 50  # 每批處理數量
+            cards_to_create = []
+            batch_size = 50
             
-            # 第一階段：準備所有要創建的名片
+            # 準備名片數據
             for i, record_data in enumerate(processed_records):
                 # 檢查重複
                 if is_duplicate_card(record_data):
                     duplicate_count += 1
-                    logger.info(f"跳過重複名片: {record_data.get('姓名', '未知')}")
+                    logger.info(f"跳過重複名片: {record_data.get('name_zh', '未知')}")
                     continue
                 
                 # 檢查重要欄位缺失
@@ -955,28 +963,30 @@ async def text_import_cards(file: UploadFile = File(...), db: Session = Depends(
                 
                 # 創建名片對象
                 card_data = Card(
-                    name=record_data.get('姓名', ''),
+                    name_zh=record_data.get('name_zh', ''),
                     name_en=record_data.get('name_en', ''),
-                    company_name=record_data.get('公司名稱', ''),
+                    company_name_zh=record_data.get('company_name_zh', ''),
                     company_name_en=record_data.get('company_name_en', ''),
-                    position=record_data.get('職位', ''),
+                    position_zh=record_data.get('position_zh', ''),
                     position_en=record_data.get('position_en', ''),
-                    position1=record_data.get('職位1', ''),
+                    position1_zh=record_data.get('position1_zh', ''),
                     position1_en=record_data.get('position1_en', ''),
-                    department1=record_data.get('部門1', ''),
+                    department1_zh=record_data.get('department1_zh', ''),
                     department1_en=record_data.get('department1_en', ''),
-                    department2=record_data.get('部門2', ''),
+                    department2_zh=record_data.get('department2_zh', ''),
                     department2_en=record_data.get('department2_en', ''),
-                    department3=record_data.get('部門3', ''),
+                    department3_zh=record_data.get('department3_zh', ''),
                     department3_en=record_data.get('department3_en', ''),
-                    mobile_phone=record_data.get('手機', ''),
-                    company_phone1=record_data.get('公司電話1', ''),
-                    company_phone2=record_data.get('公司電話2', ''),
+                    mobile_phone=record_data.get('mobile_phone', ''),
+                    company_phone1=record_data.get('company_phone1', ''),
+                    company_phone2=record_data.get('company_phone2', ''),
+                    fax=record_data.get('fax', ''),
                     email=record_data.get('email', ''),
                     line_id=record_data.get('line_id', ''),
-                    company_address1=record_data.get('公司地址一', ''),
+                    wechat_id=record_data.get('wechat_id', ''),
+                    company_address1_zh=record_data.get('company_address1_zh', ''),
                     company_address1_en=record_data.get('company_address1_en', ''),
-                    company_address2=record_data.get('公司地址二', ''),
+                    company_address2_zh=record_data.get('company_address2_zh', ''),
                     company_address2_en=record_data.get('company_address2_en', ''),
                     note1=note1,
                     note2=record_data.get('note2', f'導入時間: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}')
@@ -984,7 +994,7 @@ async def text_import_cards(file: UploadFile = File(...), db: Session = Depends(
                 
                 cards_to_create.append((card_data, is_problem_card, i))
             
-            # 第二階段：批量保存到數據庫
+            # 保存到數據庫
             success_count = 0
             error_list = []
             
@@ -1010,7 +1020,7 @@ async def text_import_cards(file: UploadFile = File(...), db: Session = Depends(
                     
                     # 記錄日誌
                     for created_card in created_cards:
-                        logger.info(f"成功創建名片: {created_card.get('name', '未知')} (批次 {batch_start//batch_size + 1})")
+                        logger.info(f"成功創建名片: {created_card.get('name_zh', '未知')} (批次 {batch_start//batch_size + 1})")
                     
                     logger.info(f"批次 {batch_start//batch_size + 1} 完成: 成功 {len(created_cards)}/{len(batch)} 筆")
                     
@@ -1021,38 +1031,21 @@ async def text_import_cards(file: UploadFile = File(...), db: Session = Depends(
                         error_list.append(error_msg)
                     logger.error(f"批次處理失敗: {str(e)}")
 
-            # 統一統計邏輯：計算完整的導入統計
-            file_stats = result_stats
-            
-            # 最終統計數據
+            # 統計數據
             final_stats = {
-                # 文件處理階段統計
-                "file_total_rows": file_stats.get('total_rows', 0),
-                "file_processed_count": file_stats.get('processed_count', 0), 
-                "file_error_count": file_stats.get('error_count', 0),
-                
-                # 數據庫保存階段統計
-                "db_total_records": len(processed_records),  # 準備保存的記錄數
-                "db_success_count": success_count,  # 成功保存的記錄數
-                "db_duplicate_count": duplicate_count,  # 跳過重複的記錄數
-                "db_problem_count": problem_count,  # 保存但有問題的記錄數
-                "db_error_count": len(error_list),  # 保存失敗的記錄數
-                "batch_size": 1,  # 批次大小
-                
-                # 最終結果統計 (對用戶最重要的數據)
-                "final_success_count": success_count,  # 最終成功導入數量
-                "final_failed_count": duplicate_count + len(error_list),  # 最終失敗數量 (重複+錯誤)
-                "final_total_attempted": len(processed_records),  # 嘗試導入的總數
-                
-                # 詳細信息
-                "column_mapping": file_stats.get('column_mapping', {}),
+                "total_rows": result_stats.get('total_rows', 0),
+                "success_count": success_count,
+                "duplicate_count": duplicate_count,
+                "problem_count": problem_count,
+                "error_count": len(error_list),
+                "column_mapping": result_stats.get('column_mapping', {}),
                 "error_details": error_list[:5],
                 "imported_file": file.filename
             }
             
-            # 組合返回消息 - 使用統一的統計邏輯
+            # 返回消息
             result_message = f"文本導入完成！"
-            result_message += f"成功導入 {final_stats['final_success_count']} 張名片"
+            result_message += f"成功導入 {final_stats['success_count']} 張名片"
             
             if duplicate_count > 0:
                 result_message += f"，跳過重複 {duplicate_count} 張"
