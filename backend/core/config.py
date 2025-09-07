@@ -60,6 +60,18 @@ OCR_API_URL = os.getenv('OCR_API_URL', 'http://0.0.0.0:23333/v1')
 OCR_API_KEY = os.getenv('OCR_API_KEY', 'YOUR_API_KEY')
 OCR_TIMEOUT = get_env_int('OCR_TIMEOUT', 30)
 
+# 卡片增強設定
+USE_CARD_ENHANCEMENT = get_env_bool('USE_CARD_ENHANCEMENT', True)
+USE_OPENCV = get_env_bool('USE_OPENCV', True)
+CARD_ENHANCEMENT_SCALE_FACTOR = get_env_int('CARD_ENHANCEMENT_SCALE_FACTOR', 3)
+CARD_ENHANCEMENT_AUTO_DETECT = get_env_bool('CARD_ENHANCEMENT_AUTO_DETECT', True)
+CARD_ENHANCEMENT_MANUAL_COORDS = get_env_list('CARD_ENHANCEMENT_MANUAL_COORDS', ['150', '440', '1130', '840'])
+
+# 批量處理設定
+BATCH_PROCESSING_SIZE = get_env_int('BATCH_PROCESSING_SIZE', 5)
+MEMORY_THRESHOLD = get_env_int('MEMORY_THRESHOLD', 85)  # 85%
+BATCH_PROCESSING_ENABLED = get_env_bool('BATCH_PROCESSING_ENABLED', True)
+
 # 序號管理設定
 SERIAL_CONFIG_FILE = os.getenv('SERIAL_CONFIG_FILE', 'config/serials.json')
 SERIAL_DEFAULT_DURATION = get_env_int('SERIAL_DEFAULT_DURATION', 15)
@@ -95,6 +107,16 @@ def print_settings_summary():
     print(f"數據庫: {DATABASE_URL}")
     print(f"上傳目錄: {UPLOAD_DIR}")
     print(f"日誌級別: {LOG_LEVEL}")
+    print(f"{'='*50}")
+    print(f"📸 卡片增強功能")
+    print(f"智能增強: {'✅ 啟用' if USE_CARD_ENHANCEMENT else '❌ 禁用'}")
+    print(f"OpenCV檢測: {'✅ 啟用' if USE_OPENCV else '❌ 禁用'}")
+    print(f"自動檢測: {'✅ 啟用' if CARD_ENHANCEMENT_AUTO_DETECT else '❌ 禁用'}")
+    print(f"放大倍數: {CARD_ENHANCEMENT_SCALE_FACTOR}x")
+    print(f"🔄 批量處理功能")
+    print(f"批量處理: {'✅ 啟用' if BATCH_PROCESSING_ENABLED else '❌ 禁用'}")
+    print(f"批次大小: {BATCH_PROCESSING_SIZE}")
+    print(f"記憶體閾值: {MEMORY_THRESHOLD}%")
     print(f"{'='*50}\n")
 
 def check_environment():
@@ -142,6 +164,18 @@ class Settings:
     OCR_UPLOAD_FOLDER = OCR_UPLOAD_FOLDER
     OCR_CONFIG_FILE = OCR_CONFIG_FILE
     OCR_BATCH_API_URL = OCR_BATCH_API_URL
+    
+    # 卡片增強設定
+    USE_CARD_ENHANCEMENT = USE_CARD_ENHANCEMENT
+    USE_OPENCV = USE_OPENCV
+    CARD_ENHANCEMENT_SCALE_FACTOR = CARD_ENHANCEMENT_SCALE_FACTOR
+    CARD_ENHANCEMENT_AUTO_DETECT = CARD_ENHANCEMENT_AUTO_DETECT
+    CARD_ENHANCEMENT_MANUAL_COORDS = CARD_ENHANCEMENT_MANUAL_COORDS
+    
+    # 批量處理設定
+    BATCH_PROCESSING_SIZE = BATCH_PROCESSING_SIZE
+    MEMORY_THRESHOLD = MEMORY_THRESHOLD
+    BATCH_PROCESSING_ENABLED = BATCH_PROCESSING_ENABLED
     
     # 序號管理設定
     SERIAL_CONFIG_FILE = SERIAL_CONFIG_FILE

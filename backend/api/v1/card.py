@@ -658,13 +658,15 @@ def export_cards(format: str = Query("csv", enum=["csv", "excel", "vcard"]), db:
 @router.post("/batch-import")
 async def batch_import_cards(db: Session = Depends(get_db)):
     """
-    使用集成到OCRService的批量導入功能
+    使用集成到OCRService的批量導入功能 - 整合智能批量處理
     """
     try:
-        from backend.services.ocr_service import OCRService
+        from backend.services.ocr_service_temp import OCRService
+        from backend.services.card_enhancement_service import BatchProcessingService
         
-        # 初始化OCR服務
+        # 初始化服務
         ocr_service = OCRService()
+        batch_service = BatchProcessingService(ocr_service.card_enhancer)
         
         # 批量處理資料夾
         batch_folder = "ocr_card_background/uploads"
@@ -687,82 +689,99 @@ async def batch_import_cards(db: Session = Depends(get_db)):
                 status_code=404
             )
         
-        logger.info(f"找到 {len(image_files)} 張圖片準備批量處理")
+        logger.info(f"找到 {len(image_files)} 張圖片準備智能批量處理")
         
-        processed_count = 0
+        # 記錄開始時的記憶體狀況
+        batch_service.log_memory_status("批量導入開始前")
+        
         success_count = 0
         error_list = []
         
-        # 使用OCRService進行批量處理
-        for image_file in image_files:
-            try:
-                processed_count += 1
-                logger.info(f"處理第 {processed_count}/{len(image_files)} 張圖片: {os.path.basename(image_file)}")
-                
-                # 使用OCRService處理圖片
-                ocr_result = ocr_service.process_single_image(image_file)
-                
-                if not ocr_result or not any(ocr_result.values()):
-                    error_list.append(f"{os.path.basename(image_file)}: OCR處理返回空結果")
-                    continue
-                
-                # 檢查必要欄位
-                name = ocr_result.get('姓名', '').strip()
-                if not name:
-                    # 如果沒有姓名，嘗試使用文件名作為姓名
+        # 使用智能批量處理進行OCR和數據庫操作
+        try:
+            processed_count = 0
+            
+            # 分批處理圖片
+            for image_file in image_files:
+                try:
+                    processed_count += 1
+                    
+                    # 記憶體檢查和清理
+                    if batch_service.should_cleanup_memory():
+                        batch_service.cleanup_memory()
+                        logger.info(f"處理第 {processed_count}/{len(image_files)} 張時執行記憶體清理")
+                    
+                    logger.info(f"處理第 {processed_count}/{len(image_files)} 張圖片: {os.path.basename(image_file)}")
+                    
+                    # 使用OCRService處理圖片
+                    ocr_result = ocr_service.process_single_image(image_file)
+                    
+                    if not ocr_result or not any(ocr_result.values()):
+                        error_list.append(f"{os.path.basename(image_file)}: OCR處理返回空結果")
+                        continue
+                    
+                    # 檢查必要欄位
+                    name = ocr_result.get('姓名', '').strip()
+                    if not name:
+                        # 如果沒有姓名，嘗試使用文件名作為姓名
+                        filename = os.path.basename(image_file)
+                        name = os.path.splitext(filename)[0]
+                        ocr_result['姓名'] = name
+                        logger.info(f"使用文件名作為姓名: {name}")
+                    
+                    # 複製圖片到正式存儲位置
+                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                     filename = os.path.basename(image_file)
-                    name = os.path.splitext(filename)[0]
-                    ocr_result['姓名'] = name
-                    logger.info(f"使用文件名作為姓名: {name}")
+                    new_filename = f"batch_{timestamp}_{processed_count:03d}_{filename}"
+                    new_image_path = os.path.join(UPLOAD_DIR, new_filename)
+                    shutil.copy2(image_file, new_image_path)
                 
-                # 複製圖片到正式存儲位置
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                filename = os.path.basename(image_file)
-                new_filename = f"batch_{timestamp}_{processed_count:03d}_{filename}"
-                new_image_path = os.path.join(UPLOAD_DIR, new_filename)
-                shutil.copy2(image_file, new_image_path)
-                
-                # 創建名片記錄，使用OCRService的標準欄位映射
-                card_data = Card(
-                    name=ocr_result.get('姓名', name),
-                    name_en=ocr_result.get('name_en', ''),
-                    company_name=ocr_result.get('公司名稱', ''),
-                    company_name_en=ocr_result.get('company_name_en', ''),
-                    position=ocr_result.get('職位', '') or ocr_result.get('職位1', ''),
-                    position_en=ocr_result.get('position_en', ''),
-                    position1=ocr_result.get('職位1', ''),
-                    position1_en=ocr_result.get('position1_en', ''),
-                    department1=ocr_result.get('部門1', ''),
-                    department1_en=ocr_result.get('Department1', ''),
-                    department2=ocr_result.get('部門2', ''),
-                    department2_en=ocr_result.get('Department2', ''),
-                    department3=ocr_result.get('部門3', ''),
-                    department3_en=ocr_result.get('Department3', ''),
-                    mobile_phone=ocr_result.get('手機', ''),
-                    company_phone1=ocr_result.get('公司電話1', ''),
-                    company_phone2=ocr_result.get('公司電話2', ''),
-                    email=ocr_result.get('Email', ''),
-                    line_id=ocr_result.get('Line ID', ''),
-                    company_address1=ocr_result.get('公司地址一', ''),
-                    company_address1_en=ocr_result.get('company_address1_en', ''),
-                    company_address2=ocr_result.get('公司地址二', ''),
-                    company_address2_en=ocr_result.get('company_address2_en', ''),
-                    note1=ocr_result.get('note1', f'批量導入自動識別 - {filename}'),
-                    note2=ocr_result.get('note2', f'OCR原始結果字段數: {len(ocr_result)}'),
-                    front_image_path=new_image_path,
-                    front_ocr_text=json.dumps(ocr_result, ensure_ascii=False)
-                )
-                
-                # 保存到數據庫
-                created_card = create_card(db, card_data)
-                success_count += 1
-                logger.info(f"成功創建名片: {created_card.get('name', '未知')} (ID: {created_card.get('id', '未知')})")
-                
-            except Exception as e:
-                error_msg = f"{os.path.basename(image_file)}: {str(e)}"
-                error_list.append(error_msg)
-                logger.error(f"處理圖片失敗: {error_msg}")
-                continue
+                    # 創建名片記錄，使用OCRService的標準欄位映射
+                    card_data = Card(
+                        name=ocr_result.get('姓名', name),
+                        name_en=ocr_result.get('name_en', ''),
+                        company_name=ocr_result.get('公司名稱', ''),
+                        company_name_en=ocr_result.get('company_name_en', ''),
+                        position=ocr_result.get('職位', '') or ocr_result.get('職位1', ''),
+                        position_en=ocr_result.get('position_en', ''),
+                        position1=ocr_result.get('職位1', ''),
+                        position1_en=ocr_result.get('position1_en', ''),
+                        department1=ocr_result.get('部門1', ''),
+                        department1_en=ocr_result.get('Department1', ''),
+                        department2=ocr_result.get('部門2', ''),
+                        department2_en=ocr_result.get('Department2', ''),
+                        department3=ocr_result.get('部門3', ''),
+                        department3_en=ocr_result.get('Department3', ''),
+                        mobile_phone=ocr_result.get('手機', ''),
+                        company_phone1=ocr_result.get('公司電話1', ''),
+                        company_phone2=ocr_result.get('公司電話2', ''),
+                        email=ocr_result.get('Email', ''),
+                        line_id=ocr_result.get('Line ID', ''),
+                        company_address1=ocr_result.get('公司地址一', ''),
+                        company_address1_en=ocr_result.get('company_address1_en', ''),
+                        company_address2=ocr_result.get('公司地址二', ''),
+                        company_address2_en=ocr_result.get('company_address2_en', ''),
+                        note1=ocr_result.get('note1', f'智能批量導入 - {filename}'),
+                        note2=ocr_result.get('note2', f'增強處理+OCR識別，字段數: {len(ocr_result)}'),
+                        front_image_path=new_image_path,
+                        front_ocr_text=json.dumps(ocr_result, ensure_ascii=False)
+                    )
+                    
+                    # 保存到數據庫
+                    created_card = create_card(db, card_data)
+                    success_count += 1
+                    logger.info(f"成功創建名片: {created_card.get('name', '未知')} (ID: {created_card.get('id', '未知')})")
+                    
+                except Exception as e:
+                    error_msg = f"{os.path.basename(image_file)}: {str(e)}"
+                    error_list.append(error_msg)
+                    logger.error(f"處理圖片失敗: {error_msg}")
+                    continue
+        
+        finally:
+            # 記錄結束時的記憶體狀況和最終清理
+            batch_service.log_memory_status("批量導入結束後")
+            batch_service.cleanup_memory()
         
         # 返回處理結果
         result_message = f"批量導入完成！成功處理 {success_count}/{len(image_files)} 張名片"
