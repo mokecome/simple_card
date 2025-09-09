@@ -21,109 +21,234 @@ from collections import OrderedDict
 from .card_detector import CardDetector
 from .card_enhancement_service import CardEnhancementService
 
-# 禁用 SSL 警�?
+# Disable SSL warnings
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 class OCRService:
-    """OCR?��?類�??��??��??��?識別?�能"""
+    """OCR Service class for business card text recognition"""
     
     def __init__(self):
         self.llm_api = LLMApi()
-        # 初始化卡片增強服務
+        # Initialize card enhancement service
         self.card_enhancer = CardEnhancementService()
-        # ?��??�面實�?顯示??6?��?�?
+        # Frontend implementation displays 25 fields
         self.CARD_FIELDS = [
-            # ?�本資�? (8??
+            # Basic information (8 fields)
             "name_zh", "name_en", "company_name_zh", "company_name_en", "position_zh", "position_en", "position1_zh", "position1_en",
-            # ?��?組�??��? (6??
+            # Department/Group info (6 fields)
             "department1_zh", "department1_en", "department2_zh", "department2_en", "department3_zh", "department3_en",
-            # ?�絡資�? (5?? 
+            # Contact information (5 fields)
             "mobile_phone", "company_phone1", "company_phone2", "email", "line_id",
-            # ?��?資�? (4??
+            # Address information (4 fields)
             "company_address1_zh", "company_address1_en", "company_address2_zh", "company_address2_en",
-            # ?�註資�? (2??
+            # Note information (2 fields)
             "note1", "note2"
         ]
         self.BATCH_OCR_API_URL = os.getenv("OCR_BATCH_API_URL", "https://local_llm.star-bit.io/api/card")
         self.IMAGE_EXTS = (".jpg", ".jpeg", ".png")
     
     async def ocr_image(self, image_content: bytes) -> str:
-        """OCR?��?識別"""
+        """OCR text recognition - Use local OCR API only"""
         try:
-            # 保�??��??�件
+            # Save temporary file
             temp_filename = f"{uuid.uuid4()}.jpg"
             temp_path = os.path.join(UPLOAD_FOLDER, temp_filename)
             
             with open(temp_path, "wb") as f:
                 f.write(image_content)
             
-            # ?��??��?
-            enhanced_path = process_image(temp_path)
-            if not enhanced_path:
-                return "?��??��?失�?"
-            
-            # OCR識別
-            result = self.llm_api.ocr_generate(enhanced_path)
-            
-            # 清�??��??�件
-            try:
-                os.remove(temp_path)
-                if enhanced_path != temp_path:
-                    os.remove(enhanced_path)
-            except Exception as e:
-                print(f"清�??��??�件?�誤: {e}")
-            
-            return result or "OCR識別失�?"
-            
-        except Exception as e:
-            print(f"OCR?��??�誤: {e}")
-            return "等�??��??��?��"
-    
-    def parse_ocr_to_fields(self, ocr_text: str, side: str) -> Dict[str, str]:
-        """�??OCR?��??��?準�?欄�?"""
-        try:
-            # 使用統�??�英?��?位�??�示詞�??��??��??�誤
-            prompt = '''你是一?��??�助?��??��??��??��??��?訊�?並輸?��?準JSON?��???
-請�??�以下�?位�?�?沒�??��?位設?�空字串):
+            # Use local OCR with structured JSON prompt (same as external service)
+            structured_prompt = '''你是專業的名片資訊提取助手。請從圖片中識別名片上的所有文字資訊，並按照以下JSON格式返回結構化數據。
+
+請仔細識別以下25個欄位（如果某個欄位在名片上沒有找到，請設為空字符串）：
+
+【個人資訊】(8個欄位)
+- 姓名（中文）
+- 姓名（英文）
+- 職位（中文）
+- 職位（英文）
+- 職位1（中文）
+- 職位1（英文）
+- 公司名稱（中文）
+- 公司名稱（英文）
+
+【部門組織架構】(6個欄位)
+- 部門1（中文）
+- 部門1（英文）
+- 部門2（中文）
+- 部門2（英文）
+- 部門3（中文）
+- 部門3（英文）
+
+【聯絡方式】(5個欄位)
+- 手機號碼
+- 公司電話1
+- 公司電話2
+- 電子郵件
+- Line ID
+
+【地址資訊】(4個欄位)
+- 公司地址1（中文）
+- 公司地址1（英文）
+- 公司地址2（中文）
+- 公司地址2（英文）
+
+【備註資訊】(2個欄位)
+- 備註1
+- 備註2
+
+請嚴格按照以下JSON格式返回，使用正確的欄位名稱，不要添加任何其他說明：
 
 {
-  "name": "中�?姓�?",
-  "name_en": "English Name", 
-  "company_name": "中�??�司?�稱",
-  "company_name_en": "English Company Name",
-  "position": "中�??��?",
-  "position_en": "English Position",
-  "position1": "中�??��?1", 
-  "position1_en": "English Position1",
-  "department1": "中�??��?1",
-  "department1_en": "English Department1",
-  "department2": "中�??��?2", 
-  "department2_en": "English Department2",
-  "department3": "中�??��?3",
-  "department3_en": "English Department3", 
-  "mobile_phone": "?��??�碼",
-  "company_phone1": "?�司?�話1",
-  "company_phone2": "?�司?�話2",
-  "email": "?��??�件",
-  "line_id": "Line ID",
-  "company_address1": "中�??��?1",
-  "company_address1_en": "English Address1", 
-  "company_address2": "中�??��?2",
-  "company_address2_en": "English Address2",
-  "note1": "?�註1",
-  "note2": "?�註2"
+  "name_zh": "陳小華",
+  "name_en": "Chen Xiaohua",
+  "company_name_zh": "創新科技股份有限公司",
+  "company_name_en": "Innovation Technology Co., Ltd.",
+  "position_zh": "資深工程師",
+  "position_en": "Senior Engineer",
+  "position1_zh": "專案經理",
+  "position1_en": "Project Manager",
+  "department1_zh": "研發部",
+  "department1_en": "R&D Department",
+  "department2_zh": "軟體開發組",
+  "department2_en": "Software Development Group",
+  "department3_zh": "",
+  "department3_en": "",
+  "mobile_phone": "0912-345-678",
+  "company_phone1": "02-2712-3456",
+  "company_phone2": "02-2712-7890",
+  "email": "chen@innovation-tech.com",
+  "line_id": "@innovation_tech",
+  "company_address1_zh": "台北市大安區復興南路100號8樓",
+  "company_address1_en": "8F, No. 100, Fuxing S. Rd., Da'an Dist., Taipei City",
+  "company_address2_zh": "",
+  "company_address2_en": "",
+  "note1": "",
+  "note2": ""
 }
 
-請解?�以下OCR?��?，只返�?JSON?��?: ''' + ocr_text
+請確保返回的是有效的JSON格式，所有字符串都用雙引號包圍，欄位名稱完全匹配上述格式。'''
+            print(f"[OCR] Using local OCR API with structured prompt for: {temp_path}")
+            result = self.llm_api.ocr_generate(temp_path, structured_prompt)
             
-            print(f"[DEBUG] OCR�???�示�? {prompt[:200]}...")
+            # If original fails, try enhanced image
+            if not result or len(result.strip()) < 20:
+                print(f"[OCR] Local OCR result too short, trying enhanced image")
+                enhanced_path = process_image(temp_path)
+                if enhanced_path and enhanced_path != temp_path:
+                    result = self.llm_api.ocr_generate(enhanced_path, chinese_prompt)
+                    # Clean up enhanced image
+                    try:
+                        os.remove(enhanced_path)
+                    except:
+                        pass
+            
+            # Clean up temporary file
+            try:
+                os.remove(temp_path)
+            except Exception as e:
+                print(f"File cleanup error: {e}")
+            
+            return result or "OCR recognition failed"
+            
+        except Exception as e:
+            print(f"OCR processing error: {e}")
+            return "Please wait for processing"
+    
+
+    def parse_ocr_to_fields(self, ocr_text: str, side: str) -> Dict[str, str]:
+        """Parse OCR text to standard fields"""
+        try:
+            print(f"[DEBUG] Starting OCR field parsing for side: {side}")
+            print(f"[DEBUG] OCR text length: {len(ocr_text)}")
+            
+            # Check if OCR text is already in JSON format (from local or external OCR)
+            try:
+                import json
+                # Try to extract JSON from the text (might have markdown formatting)
+                text_to_parse = ocr_text.strip()
+                
+                # Remove markdown formatting if present
+                if "```json" in text_to_parse:
+                    start = text_to_parse.find("```json") + len("```json")
+                    end = text_to_parse.find("```", start)
+                    if end != -1:
+                        text_to_parse = text_to_parse[start:end].strip()
+                
+                # Look for JSON object
+                start_brace = text_to_parse.find('{')
+                end_brace = text_to_parse.rfind('}')
+                
+                if start_brace != -1 and end_brace != -1 and start_brace < end_brace:
+                    json_text = text_to_parse[start_brace:end_brace+1]
+                    parsed_json = json.loads(json_text)
+                    print(f"[DEBUG] Successfully parsed JSON from OCR text, fields: {len(parsed_json)}")
+                    
+                    # Filter and validate fields
+                    valid_fields = {
+                        "name_zh", "name_en", "company_name_zh", "company_name_en", 
+                        "position_zh", "position_en", "position1_zh", "position1_en",
+                        "department1_zh", "department1_en", "department2_zh", "department2_en", 
+                        "department3_zh", "department3_en", "mobile_phone", "company_phone1", 
+                        "company_phone2", "email", "line_id", "company_address1_zh", 
+                        "company_address1_en", "company_address2_zh", "company_address2_en",
+                        "note1", "note2"
+                    }
+                    
+                    result = {}
+                    for key, value in parsed_json.items():
+                        if key in valid_fields and value and str(value).strip():
+                            result[key] = str(value).strip()
+                    
+                    print(f"[DEBUG] Valid fields extracted: {len(result)}")
+                    if result:  # Only return if we have valid data
+                        return result
+                    
+            except (json.JSONDecodeError, Exception) as e:
+                print(f"[DEBUG] JSON parsing failed, will use LLM fallback: {e}")
+            
+            # Fallback: Use the LLM-based parsing with _zh suffix field names to match database schema
+            prompt = '''You are an assistant for parsing business card information and outputting standard JSON format.
+Please identify the following fields (set empty string if not found):
+
+{
+  "name_zh": "Chinese Name",
+  "name_en": "English Name", 
+  "company_name_zh": "Chinese Company Name",
+  "company_name_en": "English Company Name",
+  "position_zh": "Chinese Position",
+  "position_en": "English Position",
+  "position1_zh": "Chinese Position1", 
+  "position1_en": "English Position1",
+  "department1_zh": "Chinese Department1",
+  "department1_en": "English Department1",
+  "department2_zh": "Chinese Department2", 
+  "department2_en": "English Department2",
+  "department3_zh": "Chinese Department3",
+  "department3_en": "English Department3", 
+  "mobile_phone": "Mobile Phone",
+  "company_phone1": "Company Phone1",
+  "company_phone2": "Company Phone2",
+  "email": "Email",
+  "line_id": "Line ID",
+  "company_address1_zh": "Chinese Address1",
+  "company_address1_en": "English Address1", 
+  "company_address2_zh": "Chinese Address2",
+  "company_address2_en": "English Address2",
+  "note1": "Note1",
+  "note2": "Note2"
+}
+
+Please parse the following OCR text and return only JSON format: ''' + ocr_text
+            
+            print(f"[DEBUG] OCR parsing prompt: {prompt[:200]}...")
             result = self.llm_api.ocr_generate("", prompt)
-            print(f"[DEBUG] LLM返�?結�?: {result[:300]}...")
+            print(f"[DEBUG] LLM returned result: {result[:300]}...")
             
-            # ?�試�??JSON結�?
+            # Try to parse JSON result
             import json
             try:
-                # 清�??�能?�Markdown?��?
+                # Clean possible Markdown formatting
                 clean_result = result.strip()
                 if clean_result.startswith("```json"):
                     clean_result = clean_result[7:]
@@ -132,60 +257,61 @@ class OCRService:
                 clean_result = clean_result.strip()
                 
                 parsed = json.loads(clean_result)
-                print(f"[DEBUG] JSON�???��?，�?位數?? {len(parsed)}")
+                print(f"[DEBUG] JSON parsing successful, field count: {len(parsed)}")
                 
-                # 驗�?並�??��?�?
+                # Validate and filter fields with _zh suffix to match database schema
                 valid_fields = {
-                    "name", "name_en", "company_name", "company_name_en", 
-                    "position", "position_en", "position1", "position1_en",
-                    "department1", "department1_en", "department2", "department2_en", 
-                    "department3", "department3_en", "mobile_phone", "company_phone1", 
-                    "company_phone2", "email", "line_id", "company_address1", 
-                    "company_address1_en", "company_address2", "company_address2_en",
+                    "name_zh", "name_en", "company_name_zh", "company_name_en", 
+                    "position_zh", "position_en", "position1_zh", "position1_en",
+                    "department1_zh", "department1_en", "department2_zh", "department2_en", 
+                    "department3_zh", "department3_en", "mobile_phone", "company_phone1", 
+                    "company_phone2", "email", "line_id", "company_address1_zh", 
+                    "company_address1_en", "company_address2_zh", "company_address2_en",
                     "note1", "note2"
                 }
                 
-                # ?��??��??��?位�?移除空�?
+                # Remove invalid fields and empty values
                 cleaned_result = {}
                 for key, value in parsed.items():
                     if key in valid_fields and value and str(value).strip():
                         cleaned_result[key] = str(value).strip()
                 
-                print(f"[DEBUG] 清�?後�??��?�? {list(cleaned_result.keys())}")
+                print(f"[DEBUG] After cleaning: {list(cleaned_result.keys())}")
+                print(f"[DEBUG] Non-empty fields: {len(cleaned_result)}")
                 return cleaned_result
                 
             except json.JSONDecodeError as e:
-                print(f"[ERROR] JSON�??失�?: {e}")
-                print(f"[ERROR] ?��?返�??�容: {result}")
+                print(f"[ERROR] JSON parsing failed: {e}")
+                print(f"[ERROR] Raw response content: {result}")
                 return {
-                    "note1": f"JSON�??失�?: {str(e)}", 
-                    "note2": f"?��?OCR?��?: {ocr_text[:200]}..."
+                    "note1": f"JSON parsing failed: {str(e)}", 
+                    "note2": f"Raw OCR text: {ocr_text[:200]}..."
                 }
                 
         except Exception as e:
-            print(f"[ERROR] 欄�?�???�誤: {e}")
+            print(f"[ERROR] Field parsing error: {e}")
             return {
-                "note1": f"�???��??�誤: {str(e)}", 
-                "note2": f"?��?OCR?��?: {ocr_text[:200]}..."
+                "note1": f"Parsing error: {str(e)}", 
+                "note2": f"Raw OCR text: {ocr_text[:200]}..."
             }
     
     def log_message(self, message):
-        """輸出信息?�控?�台"""
+        """Output message to console"""
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         log_entry = f"[{timestamp}] {message}"
         print(log_entry)
     
     def is_chinese(self, char):
-        """檢查字�??�否?�中?��?"""
+        """Check if character is Chinese"""
         return '\u4e00' <= char <= '\u9fff'
     
     def filter_data(self, merged_data):
-        """?�濾欄�??�容，中?��?位只?�中?��??��?欄�??��??��?/符�?"""
+        """Filter field content, Chinese fields only Chinese, English fields only English/symbols"""
         
-        # 不�?要�?濾�?欄�?：聯絡�?訊�??�註
+        # No need to filter these fields: contact info and notes
         ignore_filter = ["mobile_phone", "company_phone1", "company_phone2", "email", "line_id", "note1", "note2"]
         
-        # ?��?欄�??��?識符
+        # English field identifiers
         en_identifiers = ("_en",)
 
         filtered_result = OrderedDict()
@@ -196,45 +322,45 @@ class OCRService:
                 continue
 
             if any(id in key for id in en_identifiers):
-                # ?��?欄�?：移?�中?��?
+                # English fields: remove Chinese characters
                 filtered_result[key] = "".join(c for c in str(value) if not self.is_chinese(c)).strip()
             else:
-                # 中�?欄�?：只保�?中�?�?
+                # Chinese fields: keep only Chinese characters
                 filtered_result[key] = "".join(c for c in str(value) if self.is_chinese(c)).strip()
                 
         return filtered_result
     
     def batch_ocr_image(self, image_path, max_retries=3):
-        """?��?OCR?��??��?，�??��?試�???""
+        """Batch OCR processing with retry mechanism"""
         filename = os.path.basename(image_path)
         
         for attempt in range(max_retries):
             try:
-                self.log_message(f"?��?OCR?��?：{filename} (?�試 {attempt + 1}/{max_retries})")
+                self.log_message(f"Processing OCR: {filename} (attempt {attempt + 1}/{max_retries})")
                 
                 with open(image_path, "rb") as f:
                     files = {"file": (filename, f, "image/jpeg")}
                     
-                    # ?��??�試次數調整超�??��?
-                    timeout_duration = 10 + (attempt * 10)  # 10, 20, 30�?
+                    # Adjust timeout based on attempt number
+                    timeout_duration = 10 + (attempt * 10)  # 10, 20, 30 seconds
                     
                     resp = requests.post(self.BATCH_OCR_API_URL, files=files, 
                                        verify=False, timeout=timeout_duration)
                     resp.raise_for_status()
                     
-                    # 從�??��? JSON 中�???'result' 欄�?
+                    # Extract 'result' field from response JSON
                     result_json = resp.json()
                     text_content = result_json.get("result", result_json.get("text", "{}"))
                     
-                    # 檢查?��??�否?�空
+                    # Check if result is empty
                     if not text_content or text_content.strip() in ["{}", ""]:
-                        self.log_message(f"API返�?空內容�?{filename}")
+                        self.log_message(f"API returned empty content: {filename}")
                         if attempt < max_retries - 1:
                             time.sleep(2)
                             continue
                         return {}
                     
-                    # 增強?�JSON?��??�輯
+                    # Enhanced JSON extraction logic
                     if "```json" in text_content:
                         start = text_content.find("```json") + len("```json")
                         end = text_content.find("```", start)
@@ -242,47 +368,47 @@ class OCRService:
                             text_content = text_content[start:end].strip()
                         else:
                             text_content = text_content[start:].strip()
-                    elif text_content.startswith("?��??��?"):
+                    elif text_content.startswith("Here"):
                         if "```json" in text_content:
                             start = text_content.find("```json") + len("```json")
                             end = text_content.find("```", start)
                             if end != -1:
                                 text_content = text_content[start:end].strip()
                     
-                    # �?? JSON 字串
+                    # Parse JSON string
                     parsed_result = json.loads(text_content)
-                    self.log_message(f"OCR?��??��?：{filename}")
+                    self.log_message(f"OCR processing complete: {filename}")
                     return parsed_result
                     
             except requests.exceptions.Timeout:
-                self.log_message(f"請�?超�?：{filename} (?�試 {attempt + 1}/{max_retries})")
+                self.log_message(f"Request timeout: {filename} (attempt {attempt + 1}/{max_retries})")
                 if attempt < max_retries - 1:
                     time.sleep(2)
                     continue
             except requests.exceptions.RequestException as e:
-                self.log_message(f"請�??�誤：{filename}，錯誤�?{e} (?�試 {attempt + 1}/{max_retries})")
+                self.log_message(f"Request error: {filename}, error: {e} (attempt {attempt + 1}/{max_retries})")
                 if attempt < max_retries - 1:
                     time.sleep(2)
                     continue
             except json.JSONDecodeError as e:
-                self.log_message(f"JSON �??失�?：{filename}，錯誤�?{e}")
+                self.log_message(f"JSON parsing failed: {filename}, error: {e}")
                 if 'text_content' in locals():
-                    self.log_message(f"?��??�本：{text_content[:200]}...")
+                    self.log_message(f"Raw text: {text_content[:200]}...")
                 if attempt < max_retries - 1:
                     time.sleep(2)
                     continue
             except Exception as e:
-                self.log_message(f"OCR?��??�常：{filename}，錯誤�?{e} (?�試 {attempt + 1}/{max_retries})")
+                self.log_message(f"OCR processing exception: {filename}, error: {e} (attempt {attempt + 1}/{max_retries})")
                 if attempt < max_retries - 1:
                     time.sleep(2)
                     continue
         
-        # 所有重試都失敗
-        self.log_message(f"OCR處理完全失敗: {filename}, 已重試 {max_retries} 次")
+        # All retries failed
+        self.log_message(f"OCR processing completely failed: {filename}, retried {max_retries} times")
         return {}
     
     def merge_fields(self, results):
-        """多張欄位合併, 取首個非空值"""
+        """Merge multiple card fields, take first non-empty value"""
         merged = OrderedDict((k, "") for k in self.CARD_FIELDS)
         for field in self.CARD_FIELDS:
             for r in results:
@@ -292,43 +418,43 @@ class OCRService:
         return merged
     
     def process_single_image(self, image_path):
-        """處理單張圖片"""
+        """Process single image"""
         try:
-            # 執行OCR
+            # Execute OCR
             ocr_result = self.batch_ocr_image(image_path)
             
             if not ocr_result:
                 return None
             
-            # 填充欄位資料
+            # Fill field data
             processed_result = OrderedDict((k, "") for k in self.CARD_FIELDS)
             for field in self.CARD_FIELDS:
                 if field in ocr_result:
                     processed_result[field] = str(ocr_result[field])
             
-            # 過濾空值
+            # Filter empty values
             filtered_result = self.filter_data(processed_result)
             
             return filtered_result
             
         except Exception as e:
-            self.log_message(f"處理單張圖片失敗：{image_path}，錯誤：{e}")
+            self.log_message(f"Single image processing failed: {image_path}, error: {e}")
             return None
     
     async def batch_process_directory(self, base_dir, progress_callback=None):
-        """批量處理目錄下的所有圖片"""
+        """Batch process all images in directory"""
         try:
             if not os.path.exists(base_dir):
-                self.log_message(f"目錄不存在：{base_dir}")
+                self.log_message(f"Directory does not exist: {base_dir}")
                 return []
             
-            # 找出所有圖片檔案
+            # Find all image files
             all_images = []
             for file in os.listdir(base_dir):
                 if file.lower().endswith(self.IMAGE_EXTS):
                     all_images.append(os.path.join(base_dir, file))
             
-            self.log_message(f"開始批量處理，總共 {len(all_images)} 張圖片")
+            self.log_message(f"Starting batch processing, total {len(all_images)} images")
             
             results = []
             for i, image_path in enumerate(all_images):
@@ -337,11 +463,11 @@ class OCRService:
                     
                     if result:
                         results.append(result)
-                        self.log_message(f"處理 {os.path.basename(image_path)} 成功 ({i+1}/{len(all_images)})")
+                        self.log_message(f"Processing {os.path.basename(image_path)} successful ({i+1}/{len(all_images)})")
                     else:
-                        self.log_message(f"處理 {os.path.basename(image_path)} 失敗 ({i+1}/{len(all_images)})")
+                        self.log_message(f"Processing {os.path.basename(image_path)} failed ({i+1}/{len(all_images)})")
                     
-                    # 進度回調
+                    # Progress callback
                     if progress_callback:
                         await progress_callback({
                             'current': i + 1,
@@ -351,30 +477,30 @@ class OCRService:
                             'result': result
                         })
                     
-                    # 隨機延遲
+                    # Random delay
                     sleep_time = random.uniform(0.5, 1)
                     await asyncio.sleep(sleep_time)
                     
                 except Exception as e:
-                    self.log_message(f"處理圖片 {os.path.basename(image_path)} 時發生異常：{e}")
+                    self.log_message(f"Exception processing image {os.path.basename(image_path)}: {e}")
             
-            self.log_message(f"批量處理完成，成功處理 {len(results)} 張圖片")
+            self.log_message(f"Batch processing complete, successfully processed {len(results)} images")
             return results
             
         except Exception as e:
-            self.log_message(f"批量處理失敗：{e}")
+            self.log_message(f"Batch processing failed: {e}")
             return []
 
-# OCR服務不需要matplotlib字體設置，已移除
+# OCR service doesn't need matplotlib font settings, removed
 
-# 背景任務管理
+# Background task management
 cleanup_task = None
 
 async def cleanup_expired_sessions():
-    """定期清理過期會話並更新使用記錄"""
+    """Periodically clean up expired sessions and update usage records"""
     while True:
         try:
-            # 檢查過期中的會話
+            # Check expired sessions
             expired_sessions = []
             current_time = datetime.now()
             
@@ -383,23 +509,23 @@ async def cleanup_expired_sessions():
                 if current_time >= expires_at:
                     expired_sessions.append(session_id)
             
-            # 清理過期會話並更新使用記錄
+            # Clean expired sessions and update usage records
             for session_id in expired_sessions:
                 session = serial_sessions[session_id]
                 serial_code = session.get("serial_code")
                 if serial_code:
                     update_serial_usage(serial_code, "expire", session_id)
-                    print(f"[OCR] ?�話 {session_id[:8]}... 已�??�並?�新記�?")
+                    print(f"[OCR] Session {session_id[:8]}... expired and record updated")
                 del serial_sessions[session_id]
             
-            # 檢查?�置?�件中�?活�??�話
+            # Check active sessions in config file
             config = load_serial_config()
             config_updated = False
             
             for serial in config.get("valid_serials", []):
                 for record in serial.get("usage_records", []):
                     if record.get("status") == "active":
-                        # 檢查?�話?�否?�該?��?
+                        # Check if session should expire
                         started_at = datetime.fromisoformat(record["started_at"])
                         duration_minutes = serial.get("duration_minutes", config.get("default_duration", 15))
                         expected_end = started_at + timedelta(minutes=duration_minutes)
@@ -408,34 +534,34 @@ async def cleanup_expired_sessions():
                             record["ended_at"] = current_time.isoformat()
                             record["status"] = "expired"
                             config_updated = True
-                            print(f"[OCR] 序�? {serial['code']} ?��?話已?��?")
+                            print(f"[OCR] Serial {serial['code']} session expired")
             
-            # 保�??�新
+            # Save updates
             if config_updated:
                 save_serial_config(config)
                 
         except Exception as e:
-            print(f"[OCR] 清理會話錯誤: {e}")
+            print(f"[OCR] Session cleanup error: {e}")
         
-        # 每30秒執行一次
+        # Execute every 30 seconds
         await asyncio.sleep(30)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """應用生命週期管理"""
+    """Application lifecycle management"""
     global cleanup_task
-    # 啟動時
+    # On startup
     cleanup_task = asyncio.create_task(cleanup_expired_sessions())
-    print("[OCR] 啟動會話清理背景任務")
+    print("[OCR] Started session cleanup background task")
     yield
-    # 關閉時
+    # On shutdown
     if cleanup_task:
         cleanup_task.cancel()
-        print("[OCR] 停止會話清理背景任務")
+        print("[OCR] Stopped session cleanup background task")
 
-app = FastAPI(title="OCR服務 - 序號管理", lifespan=lifespan)
+app = FastAPI(title="OCR Service - Serial Management", lifespan=lifespan)
 
-# 配置
+# Configuration
 OCR_PORT = int(os.getenv("OCR_PORT", "8504"))
 OCR_HOST = os.getenv("OCR_HOST", "0.0.0.0")
 UPLOAD_FOLDER = os.getenv("UPLOAD_FOLDER", "uploads")
@@ -443,7 +569,7 @@ CONFIG_FILE = os.getenv("CONFIG_FILE", "config/serials.json")
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-# ?��?中�?序�?使用?�??
+# In-memory serial usage tracking
 serial_sessions = {}
 
 app.add_middleware(
@@ -453,19 +579,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 序號管理函數
+# Serial management functions
 def load_serial_config():
-    """載入序號配置檔案"""
+    """Load serial configuration file"""
     try:
         with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
             config = json.load(f)
             
-        # 確保使用記錄結構存在
+        # Ensure usage records structure exists
         for serial in config.get("valid_serials", []):
             if "usage_records" not in serial:
                 serial["usage_records"] = []
                 
-        # 確�?設�?存在
+        # Ensure settings exist
         if "serial_usage_settings" not in config:
             config["serial_usage_settings"] = {
                 "enable_usage_tracking": True,
@@ -489,7 +615,7 @@ def load_serial_config():
             }
         }
     except Exception as e:
-        print(f"載入?�置?�件?�誤: {e}")
+        print(f"Loading config file error: {e}")
         return {
             "valid_serials": [], 
             "admin_password": "admin123", 
@@ -504,20 +630,20 @@ def load_serial_config():
         }
 
 def save_serial_config(config):
-    """保�?序�??�置?�件"""
+    """Save serial configuration file"""
     try:
-        # 確�??��?存在
+        # Ensure directory exists
         os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
         
         with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
             json.dump(config, f, ensure_ascii=False, indent=2)
         return True
     except Exception as e:
-        print(f"保�??�置?�件?�誤: {e}")
+        print(f"Saving config file error: {e}")
         return False
 
 def update_serial_usage(serial_code: str, action: str, session_id: str = None):
-    """?�新序�?使用記�?"""
+    """Update serial usage records"""
     config = load_serial_config()
     settings = config.get("serial_usage_settings", {})
     
@@ -532,7 +658,7 @@ def update_serial_usage(serial_code: str, action: str, session_id: str = None):
             now = datetime.now()
             
             if action == "start":
-                # 檢查併發?�制
+                # Check concurrent limit
                 concurrent_limit = settings.get("concurrent_sessions_limit", 1)
                 active_sessions = [
                     record for record in serial["usage_records"]
@@ -542,7 +668,7 @@ def update_serial_usage(serial_code: str, action: str, session_id: str = None):
                 if len(active_sessions) >= concurrent_limit:
                     return False
                 
-                # 檢查?�卻?��?
+                # Check cooldown period
                 cooldown_minutes = settings.get("usage_cooldown_minutes", 0)
                 if cooldown_minutes > 0:
                     recent_usage = [
@@ -554,17 +680,17 @@ def update_serial_usage(serial_code: str, action: str, session_id: str = None):
                     if recent_usage:
                         return False
                 
-                # 添�??��?使用記�?
+                # Add new usage record
                 usage_record = {
                     "session_id": session_id,
                     "started_at": now.isoformat(),
                     "status": "active",
-                    "ip_address": "unknown"  # ?�以從�?求中?��?
+                    "ip_address": "unknown"  # Can be extracted from request
                 }
                 serial["usage_records"].append(usage_record)
                 
             elif action == "end":
-                # 結�?使用記�?
+                # End usage record
                 for record in serial["usage_records"]:
                     if record.get("session_id") == session_id and record.get("status") == "active":
                         record["ended_at"] = now.isoformat()
@@ -572,45 +698,45 @@ def update_serial_usage(serial_code: str, action: str, session_id: str = None):
                         break
             
             elif action == "expire":
-                # 標�??��???
+                # Mark as expired
                 for record in serial["usage_records"]:
                     if record.get("session_id") == session_id and record.get("status") == "active":
                         record["ended_at"] = now.isoformat()
                         record["status"] = "expired"
                         break
             
-            # 保�??�置
+            # Save config
             save_serial_config(config)
             return True
     
     return False
 
 def check_serial_availability(serial_code: str) -> dict:
-    """檢查序�??�用??""
+    """Check serial availability"""
     config = load_serial_config()
     settings = config.get("serial_usage_settings", {})
     
     for serial in config.get("valid_serials", []):
         if serial["code"] == serial_code:
-            # 檢查?�本?��???
+            # Check basic expiry
             if serial.get("expires"):
                 try:
                     expires_date = datetime.strptime(serial["expires"], "%Y-%m-%d")
                     if datetime.now() > expires_date:
-                        return {"available": False, "reason": "序�?已�???}
+                        return {"available": False, "reason": "Serial has expired"}
                 except:
                     pass
             
-            # 檢查?�次使用模�?
+            # Check single use mode
             if settings.get("single_use_mode", False):
                 completed_usage = [
                     record for record in serial.get("usage_records", [])
                     if record.get("status") in ["completed", "expired", "force_ended"]
                 ]
                 if completed_usage:
-                    return {"available": False, "reason": "序�?已被使用??}
+                    return {"available": False, "reason": "Serial has been used"}
             
-            # 檢查併發?�制
+            # Check concurrent limit
             concurrent_limit = settings.get("concurrent_sessions_limit", 1)
             active_sessions = [
                 record for record in serial.get("usage_records", [])
@@ -618,9 +744,9 @@ def check_serial_availability(serial_code: str) -> dict:
             ]
             
             if len(active_sessions) >= concurrent_limit:
-                return {"available": False, "reason": "序�?�?��使用�?}
+                return {"available": False, "reason": "Serial is currently in use"}
             
-            # 檢查?�卻?��?
+            # Check cooldown period
             cooldown_minutes = settings.get("usage_cooldown_minutes", 0)
             if cooldown_minutes > 0:
                 now = datetime.now()
@@ -631,15 +757,15 @@ def check_serial_availability(serial_code: str) -> dict:
                 ]
                 
                 if recent_usage:
-                    return {"available": False, "reason": f"序�??�冷?��?中�?請�?�?{cooldown_minutes} ?��?"}
+                    return {"available": False, "reason": f"Serial is in cooldown period, please wait {cooldown_minutes} minutes"}
             
             return {"available": True}
     
-    return {"available": False, "reason": "?��??��???}
+    return {"available": False, "reason": "Invalid serial"}
 
 def validate_serial(serial_code: str) -> Dict[str, Any]:
-    """驗�?序�??�否?��?"""
-    # 首�?檢查?�用??
+    """Validate if serial is usable"""
+    # First check availability
     availability = check_serial_availability(serial_code)
     if not availability["available"]:
         return {"valid": False, "error": availability["reason"]}
@@ -656,10 +782,10 @@ def validate_serial(serial_code: str) -> Dict[str, Any]:
                 "expires_at": (datetime.now() + timedelta(minutes=duration)).isoformat()
             }
     
-    return {"valid": False, "error": "?��??��???}
+    return {"valid": False, "error": "Invalid serial"}
 
 def get_session_status(session_id: str) -> Dict[str, Any]:
-    """?��??�話?�??""
+    """Get session status"""
     if session_id not in serial_sessions:
         return {"active": False, "remaining_seconds": 0}
     
@@ -669,12 +795,12 @@ def get_session_status(session_id: str) -> Dict[str, Any]:
     
     remaining = (expires_at - now).total_seconds()
     
-    # 增�?5秒寬容�??��??��?網絡延遲導致?��??��?�?
+    # Add 5 second tolerance to handle network delays
     if remaining <= -5:
-        # ?�話已確實�??��?清�?並更?�使?��???
-        print(f"?�話 {session_id} 已�??��??��??��?: {remaining:.1f}�?)
+        # Session has definitely expired, clean up and update usage records
+        print(f"Session {session_id} has expired: {remaining:.1f} seconds")
         
-        # ?�新使用記�??��???
+        # Update usage records for expiry
         serial_code = session.get("serial_code")
         if serial_code:
             update_serial_usage(serial_code, "expire", session_id)
@@ -682,7 +808,7 @@ def get_session_status(session_id: str) -> Dict[str, Any]:
         del serial_sessions[session_id]
         return {"active": False, "remaining_seconds": 0}
     
-    # 如�??��??��?小於等於0但在寬容範�??��?返�?0但�??�active
+    # If remaining <= 0 but within tolerance range, return 0 but keep active
     actual_remaining = max(0, int(remaining))
     
     return {
@@ -695,88 +821,83 @@ def get_session_status(session_id: str) -> Dict[str, Any]:
 class LLMApi:
     def __init__(self, model_path="/data1/models/OpenGVLab/InternVL3-8B"):
         self.model_path = model_path
-        self.client = OpenAI(api_key=os.getenv("OCR_API_KEY", "YOUR_API_KEY"), base_url=os.getenv("OCR_API_URL", "http://0.0.0.0:23333/v1"))
+        self.client = OpenAI(
+            api_key=os.getenv("OCR_API_KEY", "YOUR_API_KEY"), 
+            base_url=os.getenv("OCR_API_URL", "http://0.0.0.0:23333/v1"),
+            timeout=60.0,  # 60 seconds timeout
+            max_retries=2
+        )
 
-    def ocr_generate(self, image_path, prompt="Only return the OCR result and don't provide any other explanations."):
-        try:
-            image_url = f"{os.path.abspath(image_path)}"
-            model_name = self.client.models.list().data[0].id
-            response = self.client.chat.completions.create(
-                model=model_name,
-                messages=[{
-                    'role': 'user',
-                    'content': [{'type': 'text', 'text': prompt}, {'type': 'image_url', 'image_url': {'url': image_url}}]
-                }],
-                temperature=0
-            )
-            print(response.choices[0].message.content)
-            return response.choices[0].message.content
-        except Exception as e:
-            print(f"OCR?��???��失�?: {e}")
-            # ?��??�OCR?��?不可?��?，�??�模?�數?�用?�測�?
-            return self._get_mock_ocr_result(prompt)
-    
-    def _get_mock_ocr_result(self, prompt):
-        """?��?模擬OCR結�?"""
-        print("[DEBUG] OCR?��?不可?��?使用模擬?��?")
+    def ocr_generate(self, image_path, prompt="Only return the OCR result and don't provide any other explanations.", max_retries=3):
+        for attempt in range(max_retries):
+            try:
+                # Check if image path exists and is valid
+                if not image_path or not os.path.exists(image_path):
+                    print(f"[OCR ERROR] Image path does not exist: {image_path}")
+                    return "OCR錯誤: 圖片路徑不存在或無效"
+                
+                image_url = f"{os.path.abspath(image_path)}"
+                print(f"[OCR DEBUG] Processing image (attempt {attempt + 1}/{max_retries}): {image_url}")
+                
+                # Get model list with timeout handling
+                try:
+                    models = self.client.models.list()
+                    if not models.data:
+                        print("[OCR ERROR] No models available")
+                        return "OCR錯誤: 沒有可用的模型"
+                        
+                    model_name = models.data[0].id
+                    print(f"[OCR DEBUG] Using model: {model_name}")
+                except Exception as model_error:
+                    print(f"[OCR ERROR] Failed to get models: {model_error}")
+                    if attempt < max_retries - 1:
+                        continue
+                    return f"OCR錯誤: 無法獲取模型列表 - {str(model_error)}"
+                
+                # Make OCR request with proper error handling
+                response = self.client.chat.completions.create(
+                    model=model_name,
+                    messages=[{
+                        'role': 'user',
+                        'content': [{'type': 'text', 'text': prompt}, {'type': 'image_url', 'image_url': {'url': image_url}}]
+                    }],
+                    temperature=0,
+                    timeout=45.0  # Per-request timeout
+                )
+                
+                result = response.choices[0].message.content
+                if result and len(result.strip()) > 0:
+                    print(f"[OCR SUCCESS] OCR result length: {len(result)}")
+                    if len(result) > 100:  # Show preview for long results
+                        print(f"[OCR PREVIEW] {result[:100]}...")
+                    return result.strip()
+                else:
+                    print(f"[OCR WARNING] Empty result on attempt {attempt + 1}")
+                    if attempt < max_retries - 1:
+                        continue
+                    return "OCR錯誤: 識別結果為空"
+                
+            except Exception as e:
+                print(f"[OCR ERROR] API call failed on attempt {attempt + 1}: {e}")
+                print(f"[OCR ERROR] Exception type: {type(e).__name__}")
+                if attempt < max_retries - 1:
+                    import time
+                    time.sleep(2)  # Wait before retry
+                    continue
+                return f"OCR識別失敗: {str(e)}"
         
-        # 檢查?�否?��??��??��?�?
-        if "?��??��?" in prompt or "JSON?��?" in prompt:
-            # 返�?標�?JSON?��??�模?��??�數??
-            return '''{
-  "name": "張�???,
-  "name_en": "Zhang Xiaoming", 
-  "company_name": "?�新科�??�份?��??�司",
-  "company_name_en": "Innovation Technology Co., Ltd.",
-  "position": "資深工�?�?,
-  "position_en": "Senior Engineer",
-  "position1": "專�?經�?",
-  "position1_en": "Project Manager",
-  "department1": "?�發??,
-  "department1_en": "R&D Department",
-  "department2": "軟�??�發�?, 
-  "department2_en": "Software Development Group",
-  "department3": "",
-  "department3_en": "",
-  "mobile_phone": "0912-345-678",
-  "company_phone1": "02-2712-3456",
-  "company_phone2": "",
-  "email": "zhang@innovation-tech.com",
-  "line_id": "@innovation_tech",
-  "company_address1": "?��?市信義�?信義路�?�???,
-  "company_address1_en": "No. 7, Sec. 5, Xinyi Rd., Xinyi Dist., Taipei City",
-  "company_address2": "",
-  "company_address2_en": "",
-  "note1": "模擬OCR識別結�? - 測試模�?",
-  "note2": ""
-}'''
-        else:
-            # 返�?一?�OCR?��?識別結�?
-            return """張�???Zhang Xiaoming
-資深工�?�?/ 專�?經�?
-Senior Engineer / Project Manager
-?�新科�??�份?��??�司
-Innovation Technology Co., Ltd.
-?�發??軟�??�發�?
-R&D Department Software Development Group
-?�話: 02-2712-3456
-?��?: 0912-345-678
-Email: zhang@innovation-tech.com
-Line ID: @innovation_tech
-?��?: ?��?市信義�?信義路�?�???
-No. 7, Sec. 5, Xinyi Rd., Xinyi Dist., Taipei City
-
-???�是模擬OCR識別結�?，實?�使?��??�要�?置OCR?��?"""
+        return "OCR錯誤: 所有重試均失敗"
+    
 
 def process_image(image_path):
-    """圖片處理，提高OCR識別率 - 整合智能增強功能"""
+    """Image processing to improve OCR recognition rate - Integrated smart enhancement"""
     try:
-        # 優先嘗試使用智能卡片增強
+        # Priority: try using smart card enhancement
         use_card_enhancement = os.getenv("USE_CARD_ENHANCEMENT", "true").lower() == "true"
         
         if use_card_enhancement:
             try:
-                # 使用智能卡片增強服務
+                # Use smart card enhancement service
                 enhancer = CardEnhancementService()
                 success, enhanced_path = enhancer.process_image(
                     image_path, 
@@ -785,35 +906,35 @@ def process_image(image_path):
                 )
                 
                 if success and enhanced_path and enhanced_path != image_path:
-                    print(f"智能卡片增強成功: {enhanced_path}")
+                    print(f"Smart card enhancement successful: {enhanced_path}")
                     return enhanced_path
                 else:
-                    print(f"智能增強失敗或未啟用，使用傳統方法")
-                    # 繼續使用傳統方法
+                    print(f"Smart enhancement failed or disabled, using traditional method")
+                    # Continue with traditional method
             except Exception as enhancement_error:
-                print(f"智能增強異常，使用傳統方法: {enhancement_error}")
-                # 繼續使用傳統方法
+                print(f"Smart enhancement exception, using traditional method: {enhancement_error}")
+                # Continue with traditional method
         
-        # 備選方案：使用OpenCV檢測
+        # Fallback: use OpenCV detection
         use_opencv = os.getenv("USE_OPENCV", "true").lower() == "true"
         
         if use_opencv:
             try:
-                # 使用OpenCV檢測器
+                # Use OpenCV detector
                 detector = CardDetector()
                 success, enhanced_path = detector.process_card_image(image_path)
                 
                 if success:
-                    print(f"OpenCV處理成功: {enhanced_path}")
+                    print(f"OpenCV processing successful: {enhanced_path}")
                     return enhanced_path
                 else:
-                    print(f"OpenCV處理失敗，使用傳統方法: {enhanced_path}")
-                    # 繼續使用傳統方法
+                    print(f"OpenCV processing failed, using traditional method: {enhanced_path}")
+                    # Continue with traditional method
             except Exception as opencv_error:
-                print(f"OpenCV處理異常，使用傳統方法: {opencv_error}")
-                # 繼續使用傳統方法
+                print(f"OpenCV processing exception, using traditional method: {opencv_error}")
+                # Continue with traditional method
         
-        # 傳統PIL處理方法（保留作為最後備選）
+        # Traditional PIL processing method (kept as final fallback)
         with open(image_path, "rb") as f:
             image_data = f.read()
         image = Image.open(BytesIO(image_data))
@@ -824,57 +945,57 @@ def process_image(image_path):
         dpi = image.info.get("dpi", (100, 100))
         x_dpi = dpi[0]
 
-        # 如果DPI大於100，不需要增強
+        # If DPI is greater than 100, no enhancement needed
         if x_dpi > 100:
             return image_path
 
-        # 基礎增強：放大以提高清晰度
-        scale_factor = 1.5  # 較小的放大倍率
+        # Basic enhancement: scale up to improve clarity
+        scale_factor = 1.5  # Smaller scaling factor
         new_width = int(image.width * scale_factor)
         new_height = int(image.height * scale_factor)
         enhanced_image = image.resize((new_width, new_height), Image.LANCZOS)
         enhanced_path = os.path.splitext(image_path)[0] + "_enhanced.jpg"
-        enhanced_image.save(enhanced_path, "JPEG", quality=95, dpi=(200, 200))  # 高質量和DPI
+        enhanced_image.save(enhanced_path, "JPEG", quality=95, dpi=(200, 200))  # High quality and DPI
         return enhanced_path
     except Exception as e:
-        print(f"圖片處理錯誤: {e}")
-        return image_path  # 返回原始路徑而不是None
+        print(f"Image processing error: {e}")
+        return image_path  # Return original path instead of None
 
 def allowed_file(filename):
-    """檢查?�件?��??�是?��?�?""
+    """Check if file extension is allowed"""
     return filename.lower().endswith((".png", ".jpg", ".jpeg"))
 
 def write_file(path, content):
-    """寫入?�件?�容"""
+    """Write file content"""
     with open(path, "wb") as f:
         f.write(content)
 
 def get_image_base64(image_path):
-    """將�??��??�為Base64編碼"""
+    """Convert image to Base64 encoding"""
     try:
         with open(image_path, "rb") as f:
             image_data = f.read()
         return base64.b64encode(image_data).decode("utf-8")
     except Exception as e:
-        print(f"?��??��?Base64?�誤: {e}")
+        print(f"Convert to Base64 error: {e}")
         return None
 
-# ==================== API 路由 ====================
+# ==================== API Routes ====================
 
 @app.post("/api/ocr")
 async def api_ocr(file: UploadFile = File(...), session_id: str = Form(None)):
-    """OCR API - ?�要�??��?序�??�話"""
+    """OCR API - Requires valid serial session"""
     
-    # 檢查?�話權�?
+    # Check session permissions
     if not session_id:
-        raise HTTPException(status_code=401, detail="?�要�??��?序�??�話")
+        raise HTTPException(status_code=401, detail="Valid serial session required")
     
     session_status = get_session_status(session_id)
     if not session_status["active"]:
-        raise HTTPException(status_code=401, detail="序�??�話已�??��?請�??��?�?)
+        raise HTTPException(status_code=401, detail="Serial session has expired, please validate again")
     
     if not allowed_file(file.filename):
-        raise HTTPException(status_code=400, detail="?�支??JPG/PNG ?��?")
+        raise HTTPException(status_code=400, detail="Only JPG/PNG files supported")
 
     filename = f"{uuid.uuid4()}_{file.filename}"
     path = os.path.join(UPLOAD_FOLDER, filename)
@@ -883,18 +1004,18 @@ async def api_ocr(file: UploadFile = File(...), session_id: str = Form(None)):
 
     enhanced_path = process_image(path)
     if not enhanced_path:
-        raise HTTPException(status_code=500, detail="?��??��?失�?")
+        raise HTTPException(status_code=500, detail="Image enhancement failed")
 
     llm = LLMApi()
     result = llm.ocr_generate(enhanced_path, prompt="Only return the OCR result and don't provide any other explanations.")
     
-    # 清�??��??�件
+    # Clean up files
     try:
         os.remove(path)
         if enhanced_path != path:
             os.remove(enhanced_path)
     except Exception as e:
-        print(f"清�?檔�??�誤: {e}")
+        print(f"File cleanup error: {e}")
     
     return { 
         "result": result,
@@ -903,9 +1024,9 @@ async def api_ocr(file: UploadFile = File(...), session_id: str = Form(None)):
 
 @app.post("/api/card")
 async def api_card(file: UploadFile = File(...)):
-    """?��?識別API"""
+    """Business card recognition API"""
     if not allowed_file(file.filename):
-        raise HTTPException(status_code=400, detail="?�支??JPG/PNG ?��?")
+        raise HTTPException(status_code=400, detail="Only JPG/PNG files supported")
 
     filename = f"{uuid.uuid4()}_{file.filename}"
     path = os.path.join(UPLOAD_FOLDER, filename)
@@ -914,64 +1035,66 @@ async def api_card(file: UploadFile = File(...)):
 
     enhanced_path = process_image(path)
     if not enhanced_path:
-        raise HTTPException(status_code=500, detail="?��??��?失�?")
+        raise HTTPException(status_code=500, detail="Image enhancement failed")
 
     llm = LLMApi()
-    result = llm.ocr_generate(enhanced_path, prompt='''你是一?��??�助???��??��??��??�?�資�?["姓�?","name_en","?�司?�稱","company_name_en","?��?1","?��?2","position_en","position1_en","?��?1(?��?1)","?��?2(?��?2)","?��?3(?��?3)","Department1","Department2","Department3","?��?","?�司?�話1","?�司?�話2","Email","Line ID","?�司?��?一","?�司?��?�?,"company_address1_en","company_address2_en","note1","note2"]
-                    ,?��?如�??��?(沒�??�到?�空字串,?��?識別?�放?��?�?:
-                    {  
-                      "姓�?": "?��???,  
-                      "name_en": "Chen Xiaohua",
-                      "?�司?�稱": "?�新科�??�份?��??�司",
-                      "company_name_en": "Innovation Technology Co., Ltd.",    
-                      "?��?": "工�?�?,
-                      "?��?1": "資深工�?�?,
-                      "position_en": "Engineer",
-                      "position1_en": "Senior Engineer",    
-                      "?��?1": "機�??��?業群",
-                      "?��?2": "?��?設�???,
-                      "?��?3": "",
-                      "Department1": "M.O.E.B.G",
-                      "Department2": "Electronic Design Dept.",
-                      "Department3": "",
-                      "?��?": "135-1234-5678",  
-                      "?�司?�話1": "02-2712-3456-803",  
-                      "?�司?�話2": "02-2712-1234-803",  
-                      "Email": "chen@tech-innovation.com",  
-                      "Line ID": "@tech_innovation",  
-                      "?�司?��?一": "?��?市大安�??�復?�路100??,  
-                      "?�司?��?�?: "",
-                      "company_address1_en": "No. 100, Guangfu South Road, Da'an District, Taipei City",  
-                      "company_address2_en": "",
-                      "note1": "",
-                      "note2": ""    
-                    }''')
+    result = llm.ocr_generate(enhanced_path, prompt='''You are an assistant for parsing business card information into structured data fields with _zh suffix for Chinese fields. Please identify the following fields (set empty string if not found):
+
+{
+  "name_zh": "中文姓名",
+  "name_en": "English Name", 
+  "company_name_zh": "中文公司名稱",
+  "company_name_en": "English Company Name",
+  "position_zh": "中文職位",
+  "position_en": "English Position",
+  "position1_zh": "中文職位1", 
+  "position1_en": "English Position1",
+  "department1_zh": "中文部門1",
+  "department1_en": "English Department1",
+  "department2_zh": "中文部門2", 
+  "department2_en": "English Department2",
+  "department3_zh": "中文部門3",
+  "department3_en": "English Department3", 
+  "mobile_phone": "手機號碼",
+  "company_phone1": "公司電話1",
+  "company_phone2": "公司電話2",
+  "email": "電子郵件",
+  "line_id": "Line ID",
+  "company_address1_zh": "中文地址1",
+  "company_address1_en": "English Address1", 
+  "company_address2_zh": "中文地址2",
+  "company_address2_en": "English Address2",
+  "note1": "備註1",
+  "note2": "備註2"
+}
+
+Please parse the following business card and return ONLY JSON format:''')
     
-    # 清�?檔�?
+    # Clean up files
     try:
         os.remove(path)
         if enhanced_path != path:
             os.remove(enhanced_path)
     except Exception as e:
-        print(f"清�?檔�??�誤: {e}")
+        print(f"File cleanup error: {e}")
     
     return {"result": result}
 
-# 序�?驗�?API
+# Serial validation API
 @app.post("/api/validate-serial")
 async def validate_serial_api(serial_code: str = Form(...)):
-    """驗�?序�?並創建�?�?""
+    """Validate serial and create session"""
     validation_result = validate_serial(serial_code)
     
     if not validation_result["valid"]:
         raise HTTPException(status_code=400, detail=validation_result["error"])
     
-    # ?�建?�話
+    # Create session
     session_id = str(uuid.uuid4())
     
-    # 記�?序�?使用?��?
+    # Record serial usage start
     if not update_serial_usage(serial_code, "start", session_id):
-        raise HTTPException(status_code=400, detail="序�??��?不可使用")
+        raise HTTPException(status_code=400, detail="Serial is currently unavailable")
     
     serial_sessions[session_id] = {
         "serial_code": serial_code,
@@ -980,10 +1103,10 @@ async def validate_serial_api(serial_code: str = Form(...)):
         "created_at": datetime.now().isoformat()
     }
     
-    # 計�??��??��??��?
+    # Calculate remaining seconds
     duration_seconds = validation_result["duration_minutes"] * 60
     
-    print(f"??序�?驗�??��? - ?�話ID: {session_id[:8]}..., 序�?: {serial_code}, ?�長: {validation_result['duration_minutes']}?��?")
+    print(f"Serial validation successful - Session ID: {session_id[:8]}..., Serial: {serial_code}, Duration: {validation_result['duration_minutes']} minutes")
     
     return {
         "success": True,
@@ -996,36 +1119,36 @@ async def validate_serial_api(serial_code: str = Form(...)):
 
 @app.get("/api/check-status")
 async def check_status_api(session_id: str):
-    """檢查?�話?�??""
+    """Check session status"""
     if not session_id:
-        raise HTTPException(status_code=400, detail="缺�??�話ID")
+        raise HTTPException(status_code=400, detail="Missing session ID")
     
     status = get_session_status(session_id)
     
-    # 記�??�?�檢?�日�?
+    # Log status check
     if status["active"]:
         remaining_min = status["remaining_seconds"] // 60
         remaining_sec = status["remaining_seconds"] % 60
-        print(f"?? ?�話?�?�檢??- ID: {session_id[:8]}..., ?��?: {remaining_min:02d}:{remaining_sec:02d}")
+        print(f"Session status check - ID: {session_id[:8]}..., Remaining: {remaining_min:02d}:{remaining_sec:02d}")
     else:
-        print(f"?��? ?�話已失??- ID: {session_id[:8]}...")
+        print(f"Session expired - ID: {session_id[:8]}...")
     
     return status
 
-# ?�康檢查
+# Health check
 @app.get("/health")
 async def health_check():
-    """?��??�康檢查"""
+    """Service health check"""
     return {
         "status": "healthy",
-        "service": "OCR?��?",
+        "service": "OCR Service",
         "port": OCR_PORT,
         "timestamp": datetime.now().isoformat()
     }
 
 if __name__ == "__main__":
     import uvicorn
-    print(f"?? OCR?��??��?�?..")
-    print(f"?? ?�戶訪�??��?: http://{OCR_HOST}:{OCR_PORT}")
-    print(f"?? 序�?驗�??�OCR?�能已就�?)
-    uvicorn.run(app, host=OCR_HOST, port=OCR_PORT) 
+    print(f"Starting OCR Service...")
+    print(f"User access URL: http://{OCR_HOST}:{OCR_PORT}")
+    print(f"Serial validation and OCR functionality ready")
+    uvicorn.run(app, host=OCR_HOST, port=OCR_PORT)

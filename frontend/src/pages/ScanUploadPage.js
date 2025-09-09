@@ -23,6 +23,7 @@ import {
   LoopOutline
 } from 'antd-mobile-icons';
 import axios from 'axios';
+import { API_BASE_URL } from '../config';
 import { getCameraManager } from '../utils/cameraManager';
 import { getDeviceType } from '../utils/deviceDetector';
 import MobileCameraModal from '../components/MobileCameraModal';
@@ -53,24 +54,24 @@ const ScanUploadPage = () => {
   const [cameraManager, setCameraManager] = useState(null);
   const [isMobileCameraMode, setIsMobileCameraMode] = useState(false);
   
-  // 統一的名片資料狀態 - 完整22個欄位系統
+  // 統一的名片資料狀態 - 完整22個欄位系統 (使用_zh後綴與數據庫保持一致)
   const [cardData, setCardData] = useState({
     // 基本資訊（中英文）
-    name: '',                    // 姓名
+    name_zh: '',                 // 姓名(中文)
     name_en: '',                 // 英文姓名
-    company_name: '',            // 公司名稱
+    company_name_zh: '',         // 公司名稱(中文)
     company_name_en: '',         // 英文公司名稱
-    position: '',                // 職位
+    position_zh: '',             // 職位(中文)
     position_en: '',             // 英文職位
-    position1: '',               // 職位1(中文)
+    position1_zh: '',            // 職位1(中文)
     position1_en: '',            // 職位1(英文)
     
     // 部門組織架構（中英文，三層）
-    department1: '',             // 部門1(中文)
+    department1_zh: '',          // 部門1(中文)
     department1_en: '',          // 部門1(英文)
-    department2: '',             // 部門2(中文)
+    department2_zh: '',          // 部門2(中文)
     department2_en: '',          // 部門2(英文)
-    department3: '',             // 部門3(中文)
+    department3_zh: '',          // 部門3(中文)
     department3_en: '',          // 部門3(英文)
     
     // 聯絡資訊
@@ -81,9 +82,9 @@ const ScanUploadPage = () => {
     line_id: '',                 // Line ID
     
     // 地址資訊（中英文）
-    company_address1: '',        // 公司地址一(中文)
+    company_address1_zh: '',     // 公司地址一(中文)
     company_address1_en: '',     // 公司地址一(英文)
-    company_address2: '',        // 公司地址二(中文)
+    company_address2_zh: '',     // 公司地址二(中文)
     company_address2_en: '',     // 公司地址二(英文)
     
     // 備註資訊
@@ -125,6 +126,7 @@ const ScanUploadPage = () => {
 
   // 智能解析OCR文字並填充表單
   const parseAndFillOCRData = useCallback(async (ocrText, side) => {
+    console.log('[DEBUG] parseAndFillOCRData called with:', { ocrText, side });
     if (!ocrText) return;
     
     const startTime = performance.now();
@@ -135,13 +137,13 @@ const ScanUploadPage = () => {
       // 日誌已移除
       
       // 調用後端智能解析API
-      const response = await axios.post('/api/v1/ocr/parse-fields', {
+      const response = await axios.post(`${API_BASE_URL}/ocr/parse-fields`, {
         ocr_text: ocrText,
         side: side
       });
       const duration = performance.now() - startTime;
 
-      // 日誌已移除
+      console.log('[DEBUG] OCR API Response:', response.data);
 
       if (response.data.success) {
         const parsedFields = response.data.parsed_fields;
@@ -156,72 +158,72 @@ const ScanUploadPage = () => {
           return;
         }
 
-        // 日誌已移除
+        console.log('[DEBUG] Before auto-assignment logic:', parsedFields);
         
         // === 中英文自動分配邏輯（後備機制）===
         // 如果OCR服務沒有正確分配中英文內容，自動重新分配
         
         // 姓名中英文自動分配
-        if (parsedFields.name && !parsedFields.name_en) {
+        if (parsedFields.name_zh && !parsedFields.name_en) {
           // 如果中文欄位包含純英文，移到英文欄位
-          if (/^[A-Za-z .'-]+$/.test(parsedFields.name)) {
-            parsedFields.name_en = parsedFields.name;
-            parsedFields.name = '';
+          if (/^[A-Za-z .'-]+$/.test(parsedFields.name_zh)) {
+            parsedFields.name_en = parsedFields.name_zh;
+            parsedFields.name_zh = '';
           }
         }
-        if (parsedFields.name_en && !parsedFields.name) {
+        if (parsedFields.name_en && !parsedFields.name_zh) {
           // 如果英文欄位包含中文，移到中文欄位
           if (/[\u4e00-\u9fff]/.test(parsedFields.name_en)) {
-            parsedFields.name = parsedFields.name_en;
+            parsedFields.name_zh = parsedFields.name_en;
             parsedFields.name_en = '';
           }
         }
         
         // 公司名稱中英文自動分配
-        if (parsedFields.company_name && !parsedFields.company_name_en) {
-          if (/^[A-Za-z0-9 .,'&()-]+$/.test(parsedFields.company_name)) {
-            parsedFields.company_name_en = parsedFields.company_name;
-            parsedFields.company_name = '';
+        if (parsedFields.company_name_zh && !parsedFields.company_name_en) {
+          if (/^[A-Za-z0-9 .,'&()-]+$/.test(parsedFields.company_name_zh)) {
+            parsedFields.company_name_en = parsedFields.company_name_zh;
+            parsedFields.company_name_zh = '';
           }
         }
-        if (parsedFields.company_name_en && !parsedFields.company_name) {
+        if (parsedFields.company_name_en && !parsedFields.company_name_zh) {
           if (/[\u4e00-\u9fff]/.test(parsedFields.company_name_en)) {
-            parsedFields.company_name = parsedFields.company_name_en;
+            parsedFields.company_name_zh = parsedFields.company_name_en;
             parsedFields.company_name_en = '';
           }
         }
         
         // 職位中英文自動分配
-        if (parsedFields.position && !parsedFields.position_en) {
-          if (/^[A-Za-z0-9 .,'&()-]+$/.test(parsedFields.position)) {
-            parsedFields.position_en = parsedFields.position;
-            parsedFields.position = '';
+        if (parsedFields.position_zh && !parsedFields.position_en) {
+          if (/^[A-Za-z0-9 .,'&()-]+$/.test(parsedFields.position_zh)) {
+            parsedFields.position_en = parsedFields.position_zh;
+            parsedFields.position_zh = '';
           }
         }
-        if (parsedFields.position_en && !parsedFields.position) {
+        if (parsedFields.position_en && !parsedFields.position_zh) {
           if (/[\u4e00-\u9fff]/.test(parsedFields.position_en)) {
-            parsedFields.position = parsedFields.position_en;
+            parsedFields.position_zh = parsedFields.position_en;
             parsedFields.position_en = '';
           }
         }
         
         // 職位1中英文自動分配
-        if (parsedFields.position1 && !parsedFields.position1_en) {
-          if (/^[A-Za-z0-9 .,'&()-]+$/.test(parsedFields.position1)) {
-            parsedFields.position1_en = parsedFields.position1;
-            parsedFields.position1 = '';
+        if (parsedFields.position1_zh && !parsedFields.position1_en) {
+          if (/^[A-Za-z0-9 .,'&()-]+$/.test(parsedFields.position1_zh)) {
+            parsedFields.position1_en = parsedFields.position1_zh;
+            parsedFields.position1_zh = '';
           }
         }
-        if (parsedFields.position1_en && !parsedFields.position1) {
+        if (parsedFields.position1_en && !parsedFields.position1_zh) {
           if (/[\u4e00-\u9fff]/.test(parsedFields.position1_en)) {
-            parsedFields.position1 = parsedFields.position1_en;
+            parsedFields.position1_zh = parsedFields.position1_en;
             parsedFields.position1_en = '';
           }
         }
         
         // 部門中英文自動分配
         for (let i = 1; i <= 3; i++) {
-          const zhKey = `department${i}`;
+          const zhKey = `department${i}_zh`;
           const enKey = `department${i}_en`;
           
           if (parsedFields[zhKey] && !parsedFields[enKey]) {
@@ -240,7 +242,7 @@ const ScanUploadPage = () => {
         
         // 地址中英文自動分配
         for (let i = 1; i <= 2; i++) {
-          const zhKey = `company_address${i}`;
+          const zhKey = `company_address${i}_zh`;
           const enKey = `company_address${i}_en`;
           
           if (parsedFields[zhKey] && !parsedFields[enKey]) {
@@ -258,25 +260,44 @@ const ScanUploadPage = () => {
         }
         // === END 中英文自動分配邏輯 ===
         
+        console.log('[DEBUG] After auto-assignment logic:', parsedFields);
+        
         let filledFieldsCount = 0;
         setCardData(prevData => {
           const updatedData = { ...prevData };
+          console.log('[DEBUG] parsedFields:', parsedFields);
+          console.log('[DEBUG] prevData before update:', prevData);
+          
           Object.keys(parsedFields).forEach(field => {
-            if (parsedFields[field] && (!updatedData[field] || updatedData[field].trim() === '')) {
-              updatedData[field] = parsedFields[field];
+            const value = parsedFields[field];
+            const currentValue = updatedData[field];
+            const shouldUpdate = value && (!currentValue || currentValue.trim() === '');
+            
+            console.log(`[DEBUG] Field: ${field}, Value: "${value}", Current: "${currentValue}", ShouldUpdate: ${shouldUpdate}`);
+            
+            if (shouldUpdate) {
+              updatedData[field] = value;
               filledFieldsCount++;
+              console.log(`[DEBUG] Updated field ${field} = "${value}"`);
             }
           });
+          
+          console.log('[DEBUG] updatedData after update:', updatedData);
+          console.log('[DEBUG] filledFieldsCount:', filledFieldsCount);
+          
+          // 確保計數器能正確捕獲
+          setTimeout(() => {
+            Toast.show({
+              content: `${side === 'front' ? '正面' : '反面'}資料解析完成！已自動填入${filledFieldsCount}個欄位`,
+              position: 'center',
+            });
+          }, 100);
+          
           return updatedData;
         });
         
         // 日誌已移除
         updateImageParseStatus(side, 'success');
-        
-        Toast.show({
-          content: `${side === 'front' ? '正面' : '反面'}資料解析完成！已自動填入${filledFieldsCount}個欄位`,
-          position: 'center',
-        });
       } else {
         console.error('後端解析失敗', side, response.data);
         updateImageParseStatus(side, 'error');
@@ -317,7 +338,7 @@ const ScanUploadPage = () => {
       const formData = new FormData();
       formData.append('file', file);
 
-      const response = await axios.post('/api/v1/ocr/image', formData, {
+      const response = await axios.post(`${API_BASE_URL}/ocr/image`, formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
@@ -630,7 +651,7 @@ const ScanUploadPage = () => {
   // 保存名片資料
   const handleSave = async () => {
     // 驗證必填欄位
-    if (!cardData.name.trim()) {
+    if (!cardData.name_zh.trim()) {
       Toast.show({
         content: '請輸入姓名',
         position: 'center',
@@ -665,7 +686,7 @@ const ScanUploadPage = () => {
         saveData.append('back_ocr_text', backImage.ocrText);
       }
 
-      const response = await axios.post('/api/v1/cards/', saveData, {
+      const response = await axios.post(`${API_BASE_URL}/cards/`, saveData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
@@ -680,16 +701,40 @@ const ScanUploadPage = () => {
         });
         // 清空表單
         setCardData({
-          name: '',
-          company_name: '',
-          position: '',
-          mobile_phone: '',
-          office_phone: '',
-          email: '',
-          line_id: '',
-          notes: '',
-          company_address_1: '',
-          company_address_2: ''
+          // 基本資訊（中英文）
+          name_zh: '',                 
+          name_en: '',                 
+          company_name_zh: '',         
+          company_name_en: '',         
+          position_zh: '',             
+          position_en: '',             
+          position1_zh: '',            
+          position1_en: '',            
+          
+          // 部門組織架構（中英文，三層）
+          department1_zh: '',          
+          department1_en: '',          
+          department2_zh: '',          
+          department2_en: '',          
+          department3_zh: '',          
+          department3_en: '',          
+          
+          // 聯絡資訊
+          mobile_phone: '',            
+          company_phone1: '',          
+          company_phone2: '',          
+          email: '',                   
+          line_id: '',                 
+          
+          // 地址資訊（中英文）
+          company_address1_zh: '',     
+          company_address1_en: '',     
+          company_address2_zh: '',     
+          company_address2_en: '',     
+          
+          // 備註資訊
+          note1: '',
+          note2: ''
         });
         setFrontImage({ file: null, preview: null, ocrText: '', parseStatus: null });
         setBackImage({ file: null, preview: null, ocrText: '', parseStatus: null });
@@ -700,7 +745,7 @@ const ScanUploadPage = () => {
       console.error('保存失敗', { 
         error: error.message, 
         cardData: {
-          hasName: !!cardData.name,
+          hasName: !!cardData.name_zh,
           hasCompany: !!cardData.company_name,
           hasFrontImage: !!frontImage.file,
           hasBackImage: !!backImage.file
@@ -914,8 +959,8 @@ const ScanUploadPage = () => {
                 <Form.Item label="姓名">
                   <Input
                     placeholder="請輸入中文姓名"
-                    value={cardData.name}
-                    onChange={(value) => handleFieldChange('name', value)}
+                    value={cardData.name_zh}
+                    onChange={(value) => handleFieldChange('name_zh', value)}
                   />
                 </Form.Item>
                 
@@ -932,8 +977,8 @@ const ScanUploadPage = () => {
                 <Form.Item label="公司名稱">
                   <Input
                     placeholder="請輸入公司名稱"
-                    value={cardData.company_name}
-                    onChange={(value) => handleFieldChange('company_name', value)}
+                    value={cardData.company_name_zh}
+                    onChange={(value) => handleFieldChange('company_name_zh', value)}
                   />
                 </Form.Item>
                 
@@ -950,8 +995,8 @@ const ScanUploadPage = () => {
                 <Form.Item label="職位1">
                   <Input
                     placeholder="請輸入職位1"
-                    value={cardData.position}
-                    onChange={(value) => handleFieldChange('position', value)}
+                    value={cardData.position_zh}
+                    onChange={(value) => handleFieldChange('position_zh', value)}
                   />
                 </Form.Item>
                 
@@ -968,8 +1013,8 @@ const ScanUploadPage = () => {
                 <Form.Item label="職位2">
                   <Input
                     placeholder="請輸入職位2"
-                    value={cardData.position1}
-                    onChange={(value) => handleFieldChange('position1', value)}
+                    value={cardData.position1_zh}
+                    onChange={(value) => handleFieldChange('position1_zh', value)}
                   />
                 </Form.Item>
                 
@@ -991,8 +1036,8 @@ const ScanUploadPage = () => {
                 <Form.Item label="部門1(單位1)">
                   <Input
                     placeholder="請輸入第一層部門"
-                    value={cardData.department1}
-                    onChange={(value) => handleFieldChange('department1', value)}
+                    value={cardData.department1_zh}
+                    onChange={(value) => handleFieldChange('department1_zh', value)}
                   />
                 </Form.Item>
                 
@@ -1009,8 +1054,8 @@ const ScanUploadPage = () => {
                 <Form.Item label="部門2(單位2)">
                   <Input
                     placeholder="請輸入第二層部門"
-                    value={cardData.department2}
-                    onChange={(value) => handleFieldChange('department2', value)}
+                    value={cardData.department2_zh}
+                    onChange={(value) => handleFieldChange('department2_zh', value)}
                   />
                 </Form.Item>
                 
@@ -1027,8 +1072,8 @@ const ScanUploadPage = () => {
                 <Form.Item label="部門3(單位3)">
                   <Input
                     placeholder="請輸入第三層部門"
-                    value={cardData.department3}
-                    onChange={(value) => handleFieldChange('department3', value)}
+                    value={cardData.department3_zh}
+                    onChange={(value) => handleFieldChange('department3_zh', value)}
                   />
                 </Form.Item>
                 
@@ -1097,8 +1142,8 @@ const ScanUploadPage = () => {
                 <Form.Item label="公司地址一">
                   <Input
                     placeholder="請輸入公司地址"
-                    value={cardData.company_address1}
-                    onChange={(value) => handleFieldChange('company_address1', value)}
+                    value={cardData.company_address1_zh}
+                    onChange={(value) => handleFieldChange('company_address1_zh', value)}
                   />
                 </Form.Item>
                 
@@ -1115,8 +1160,8 @@ const ScanUploadPage = () => {
                 <Form.Item label="公司地址二">
                   <Input
                     placeholder="請輸入公司地址（補充）"
-                    value={cardData.company_address2}
-                    onChange={(value) => handleFieldChange('company_address2', value)}
+                    value={cardData.company_address2_zh}
+                    onChange={(value) => handleFieldChange('company_address2_zh', value)}
                   />
                 </Form.Item>
                 

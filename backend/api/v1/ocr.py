@@ -1,6 +1,6 @@
 from fastapi import APIRouter, UploadFile, File, HTTPException
 from pydantic import BaseModel
-from backend.services.ocr_service_temp import OCRService
+from backend.services.ocr_service import OCRService
 from typing import Optional
 
 router = APIRouter()
