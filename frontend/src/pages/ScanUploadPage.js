@@ -261,6 +261,9 @@ const ScanUploadPage = () => {
         // === END 中英文自動分配邏輯 ===
         
         console.log('[DEBUG] After auto-assignment logic:', parsedFields);
+        const nonEmptyFields = Object.keys(parsedFields).filter(key => parsedFields[key] && typeof parsedFields[key] === 'string' && parsedFields[key].trim() !== '');
+        console.log('[DEBUG] Non-empty fields from backend:', nonEmptyFields);
+        console.log('[DEBUG] Non-empty fields count:', nonEmptyFields.length);
         
         let filledFieldsCount = 0;
         setCardData(prevData => {
@@ -271,14 +274,15 @@ const ScanUploadPage = () => {
           Object.keys(parsedFields).forEach(field => {
             const value = parsedFields[field];
             const currentValue = updatedData[field];
-            const shouldUpdate = value && (!currentValue || currentValue.trim() === '');
+            const hasValue = value && typeof value === 'string' && value.trim() !== '';
+            const shouldUpdate = hasValue && (!currentValue || currentValue.trim() === '');
             
-            console.log(`[DEBUG] Field: ${field}, Value: "${value}", Current: "${currentValue}", ShouldUpdate: ${shouldUpdate}`);
+            console.log(`[DEBUG] Field: ${field}, Value: "${value}", HasValue: ${hasValue}, Current: "${currentValue}", ShouldUpdate: ${shouldUpdate}`);
             
             if (shouldUpdate) {
-              updatedData[field] = value;
+              updatedData[field] = value.trim();
               filledFieldsCount++;
-              console.log(`[DEBUG] Updated field ${field} = "${value}"`);
+              console.log(`[DEBUG] Updated field ${field} = "${value.trim()}"`);
             }
           });
           
