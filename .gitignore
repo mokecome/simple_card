@@ -50,3 +50,6 @@ htmlcov/
 # 临时文件
 *.tmp
 *.bak
+
+# 备份配置文件
+.backup_configs/
