@@ -127,13 +127,14 @@ const ScanUploadPage = () => {
   const parseAndFillOCRData = useCallback(async (ocrText, side) => {
     if (!ocrText) return;
     
+    const startTime = performance.now();
+    
     try {
       updateImageParseStatus(side, 'parsing');
       
       // 日誌已移除
       
       // 調用後端智能解析API
-      const startTime = performance.now();
       const response = await axios.post('/api/v1/ocr/parse-fields', {
         ocr_text: ocrText,
         side: side
