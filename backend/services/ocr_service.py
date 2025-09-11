@@ -60,6 +60,8 @@ class OCRService:
             # Use local OCR with structured JSON prompt (same as external service)
             structured_prompt = '''你是專業的名片資訊提取助手。請從圖片中識別名片上的所有文字資訊，並按照以下JSON格式返回結構化數據。
 
+重要：請從實際圖片內容中提取真實資訊，絕對不要使用下方範例中的數據。
+
 請仔細識別以下25個欄位（如果某個欄位在名片上沒有找到，請設為空字符串）：
 
 【個人資訊】(8個欄位)
@@ -97,37 +99,37 @@ class OCRService:
 - 備註1
 - 備註2
 
-請嚴格按照以下JSON格式返回，使用正確的欄位名稱，不要添加任何其他說明：
+請嚴格按照以下JSON格式返回，使用正確的欄位名稱，填入從圖片中實際識別到的內容：
 
 {
-  "name_zh": "陳小華",
-  "name_en": "Chen Xiaohua",
-  "company_name_zh": "創新科技股份有限公司",
-  "company_name_en": "Innovation Technology Co., Ltd.",
-  "position_zh": "資深工程師",
-  "position_en": "Senior Engineer",
-  "position1_zh": "專案經理",
-  "position1_en": "Project Manager",
-  "department1_zh": "研發部",
-  "department1_en": "R&D Department",
-  "department2_zh": "軟體開發組",
-  "department2_en": "Software Development Group",
-  "department3_zh": "",
-  "department3_en": "",
-  "mobile_phone": "0912-345-678",
-  "company_phone1": "02-2712-3456",
-  "company_phone2": "02-2712-7890",
-  "email": "chen@innovation-tech.com",
-  "line_id": "@innovation_tech",
-  "company_address1_zh": "台北市大安區復興南路100號8樓",
-  "company_address1_en": "8F, No. 100, Fuxing S. Rd., Da'an Dist., Taipei City",
-  "company_address2_zh": "",
-  "company_address2_en": "",
-  "note1": "",
-  "note2": ""
+  "name_zh": "[從圖片識別的中文姓名]",
+  "name_en": "[從圖片識別的英文姓名]",
+  "company_name_zh": "[從圖片識別的中文公司名稱]",
+  "company_name_en": "[從圖片識別的英文公司名稱]",
+  "position_zh": "[從圖片識別的中文職位]",
+  "position_en": "[從圖片識別的英文職位]",
+  "position1_zh": "[從圖片識別的中文職位1]",
+  "position1_en": "[從圖片識別的英文職位1]",
+  "department1_zh": "[從圖片識別的中文部門1]",
+  "department1_en": "[從圖片識別的英文部門1]",
+  "department2_zh": "[從圖片識別的中文部門2]",
+  "department2_en": "[從圖片識別的英文部門2]",
+  "department3_zh": "[從圖片識別的中文部門3]",
+  "department3_en": "[從圖片識別的英文部門3]",
+  "mobile_phone": "[從圖片識別的手機號碼]",
+  "company_phone1": "[從圖片識別的公司電話1]",
+  "company_phone2": "[從圖片識別的公司電話2]",
+  "email": "[從圖片識別的電子郵件]",
+  "line_id": "[從圖片識別的Line ID]",
+  "company_address1_zh": "[從圖片識別的中文地址1]",
+  "company_address1_en": "[從圖片識別的英文地址1]",
+  "company_address2_zh": "[從圖片識別的中文地址2]",
+  "company_address2_en": "[從圖片識別的英文地址2]",
+  "note1": "[從圖片識別的備註1]",
+  "note2": "[從圖片識別的備註2]"
 }
 
-請確保返回的是有效的JSON格式，所有字符串都用雙引號包圍，欄位名稱完全匹配上述格式。'''
+注意：請將方括號及其內容替換為實際識別到的資訊，若某欄位沒有內容則填入空字符串""。絕對不要使用上方的範例數據！'''
             print(f"[OCR] Using local OCR API with structured prompt for: {temp_path}")
             result = self.llm_api.ocr_generate(temp_path, structured_prompt)
             
@@ -136,7 +138,7 @@ class OCRService:
                 print(f"[OCR] Local OCR result too short, trying enhanced image")
                 enhanced_path = process_image(temp_path)
                 if enhanced_path and enhanced_path != temp_path:
-                    result = self.llm_api.ocr_generate(enhanced_path, chinese_prompt)
+                    result = self.llm_api.ocr_generate(enhanced_path, structured_prompt)
                     # Clean up enhanced image
                     try:
                         os.remove(enhanced_path)
@@ -209,35 +211,40 @@ class OCRService:
             
             # Fallback: Use the LLM-based parsing with _zh suffix field names to match database schema
             prompt = '''You are an assistant for parsing business card information and outputting standard JSON format.
-Please identify the following fields (set empty string if not found):
+
+IMPORTANT: Extract actual information from the OCR text provided. Do NOT use the placeholder examples below.
+
+Please identify the following 25 fields from the OCR text (set empty string if not found):
 
 {
-  "name_zh": "Chinese Name",
-  "name_en": "English Name", 
-  "company_name_zh": "Chinese Company Name",
-  "company_name_en": "English Company Name",
-  "position_zh": "Chinese Position",
-  "position_en": "English Position",
-  "position1_zh": "Chinese Position1", 
-  "position1_en": "English Position1",
-  "department1_zh": "Chinese Department1",
-  "department1_en": "English Department1",
-  "department2_zh": "Chinese Department2", 
-  "department2_en": "English Department2",
-  "department3_zh": "Chinese Department3",
-  "department3_en": "English Department3", 
-  "mobile_phone": "Mobile Phone",
-  "company_phone1": "Company Phone1",
-  "company_phone2": "Company Phone2",
-  "email": "Email",
-  "line_id": "Line ID",
-  "company_address1_zh": "Chinese Address1",
-  "company_address1_en": "English Address1", 
-  "company_address2_zh": "Chinese Address2",
-  "company_address2_en": "English Address2",
-  "note1": "Note1",
-  "note2": "Note2"
+  "name_zh": "[Actual Chinese name from OCR]",
+  "name_en": "[Actual English name from OCR]", 
+  "company_name_zh": "[Actual Chinese company name from OCR]",
+  "company_name_en": "[Actual English company name from OCR]",
+  "position_zh": "[Actual Chinese position from OCR]",
+  "position_en": "[Actual English position from OCR]",
+  "position1_zh": "[Actual Chinese position1 from OCR]", 
+  "position1_en": "[Actual English position1 from OCR]",
+  "department1_zh": "[Actual Chinese department1 from OCR]",
+  "department1_en": "[Actual English department1 from OCR]",
+  "department2_zh": "[Actual Chinese department2 from OCR]", 
+  "department2_en": "[Actual English department2 from OCR]",
+  "department3_zh": "[Actual Chinese department3 from OCR]",
+  "department3_en": "[Actual English department3 from OCR]", 
+  "mobile_phone": "[Actual mobile phone from OCR]",
+  "company_phone1": "[Actual company phone1 from OCR]",
+  "company_phone2": "[Actual company phone2 from OCR]",
+  "email": "[Actual email from OCR]",
+  "line_id": "[Actual Line ID from OCR]",
+  "company_address1_zh": "[Actual Chinese address1 from OCR]",
+  "company_address1_en": "[Actual English address1 from OCR]", 
+  "company_address2_zh": "[Actual Chinese address2 from OCR]",
+  "company_address2_en": "[Actual English address2 from OCR]",
+  "note1": "[Actual note1 from OCR]",
+  "note2": "[Actual note2 from OCR]"
 }
+
+Note: Replace the brackets and their content with actual information from the OCR text. If a field has no content, use empty string "".
 
 Please parse the following OCR text and return only JSON format: ''' + ocr_text
             
@@ -1038,35 +1045,41 @@ async def api_card(file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail="Image enhancement failed")
 
     llm = LLMApi()
-    result = llm.ocr_generate(enhanced_path, prompt='''You are an assistant for parsing business card information into structured data fields with _zh suffix for Chinese fields. Please identify the following fields (set empty string if not found):
+    result = llm.ocr_generate(enhanced_path, prompt='''You are an assistant for parsing business card information into structured data fields with _zh suffix for Chinese fields. 
+
+IMPORTANT: Extract actual information from the business card image. Do NOT use the placeholder examples below.
+
+Please identify the following 25 fields from the business card (set empty string if not found):
 
 {
-  "name_zh": "中文姓名",
-  "name_en": "English Name", 
-  "company_name_zh": "中文公司名稱",
-  "company_name_en": "English Company Name",
-  "position_zh": "中文職位",
-  "position_en": "English Position",
-  "position1_zh": "中文職位1", 
-  "position1_en": "English Position1",
-  "department1_zh": "中文部門1",
-  "department1_en": "English Department1",
-  "department2_zh": "中文部門2", 
-  "department2_en": "English Department2",
-  "department3_zh": "中文部門3",
-  "department3_en": "English Department3", 
-  "mobile_phone": "手機號碼",
-  "company_phone1": "公司電話1",
-  "company_phone2": "公司電話2",
-  "email": "電子郵件",
-  "line_id": "Line ID",
-  "company_address1_zh": "中文地址1",
-  "company_address1_en": "English Address1", 
-  "company_address2_zh": "中文地址2",
-  "company_address2_en": "English Address2",
-  "note1": "備註1",
-  "note2": "備註2"
+  "name_zh": "[Actual Chinese name from card]",
+  "name_en": "[Actual English name from card]", 
+  "company_name_zh": "[Actual Chinese company name from card]",
+  "company_name_en": "[Actual English company name from card]",
+  "position_zh": "[Actual Chinese position from card]",
+  "position_en": "[Actual English position from card]",
+  "position1_zh": "[Actual Chinese position1 from card]", 
+  "position1_en": "[Actual English position1 from card]",
+  "department1_zh": "[Actual Chinese department1 from card]",
+  "department1_en": "[Actual English department1 from card]",
+  "department2_zh": "[Actual Chinese department2 from card]", 
+  "department2_en": "[Actual English department2 from card]",
+  "department3_zh": "[Actual Chinese department3 from card]",
+  "department3_en": "[Actual English department3 from card]", 
+  "mobile_phone": "[Actual mobile phone from card]",
+  "company_phone1": "[Actual company phone1 from card]",
+  "company_phone2": "[Actual company phone2 from card]",
+  "email": "[Actual email from card]",
+  "line_id": "[Actual Line ID from card]",
+  "company_address1_zh": "[Actual Chinese address1 from card]",
+  "company_address1_en": "[Actual English address1 from card]", 
+  "company_address2_zh": "[Actual Chinese address2 from card]",
+  "company_address2_en": "[Actual English address2 from card]",
+  "note1": "[Actual note1 from card]",
+  "note2": "[Actual note2 from card]"
 }
+
+Note: Replace the brackets and their content with actual information from the business card. If a field has no content, use empty string "".
 
 Please parse the following business card and return ONLY JSON format:''')
     

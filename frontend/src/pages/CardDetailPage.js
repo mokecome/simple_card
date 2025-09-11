@@ -29,25 +29,25 @@ const CardDetailPage = () => {
   const [saving, setSaving] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   
-  // 統一的名片資料狀態 - 與OCR掃描頁面保持一致的22個欄位
+  // 統一的名片資料狀態 - 與資料庫欄位名稱保持一致
   const [cardData, setCardData] = useState({
     id: '',
     // 基本資訊（中英文）
-    name: '',                    // 姓名
+    name_zh: '',                 // 姓名(中文)
     name_en: '',                 // 英文姓名
-    company_name: '',            // 公司名稱
+    company_name_zh: '',         // 公司名稱(中文)
     company_name_en: '',         // 英文公司名稱
-    position: '',                // 職位
+    position_zh: '',             // 職位(中文)
     position_en: '',             // 英文職位
-    position1: '',               // 職位1(中文)
+    position1_zh: '',            // 職位1(中文)
     position1_en: '',            // 職位1(英文)
     
     // 部門組織架構（中英文，三層）
-    department1: '',             // 部門1(中文)
+    department1_zh: '',          // 部門1(中文)
     department1_en: '',          // 部門1(英文)
-    department2: '',             // 部門2(中文)
+    department2_zh: '',          // 部門2(中文)
     department2_en: '',          // 部門2(英文)
-    department3: '',             // 部門3(中文)
+    department3_zh: '',          // 部門3(中文)
     department3_en: '',          // 部門3(英文)
     
     // 聯絡資訊
@@ -58,9 +58,9 @@ const CardDetailPage = () => {
     line_id: '',                 // Line ID
     
     // 地址資訊（中英文）
-    company_address1: '',        // 公司地址一(中文)
+    company_address1_zh: '',     // 公司地址一(中文)
     company_address1_en: '',     // 公司地址一(英文)
-    company_address2: '',        // 公司地址二(中文)
+    company_address2_zh: '',     // 公司地址二(中文)
     company_address2_en: '',     // 公司地址二(英文)
     
     // 備註資訊
@@ -139,7 +139,7 @@ const CardDetailPage = () => {
   // 保存名片資料
   const handleSave = async () => {
     // 驗證必填欄位
-    if (!cardData.name || !cardData.name.trim()) {
+    if (!cardData.name_zh || !cardData.name_zh.trim()) {
       Toast.show({
         content: '請輸入姓名',
         position: 'center',
@@ -285,12 +285,12 @@ const CardDetailPage = () => {
                   {isEditing ? (
                     <Input
                       placeholder="請輸入中文姓名"
-                      value={cardData.name}
-                      onChange={(value) => handleFieldChange('name', value)}
+                      value={cardData.name_zh}
+                      onChange={(value) => handleFieldChange('name_zh', value)}
                     />
                   ) : (
                     <div style={{ padding: '8px 0', fontSize: '16px' }}>
-                      {cardData.name || '-'}
+                      {cardData.name_zh || '-'}
                     </div>
                   )}
                 </Form.Item>
@@ -315,12 +315,12 @@ const CardDetailPage = () => {
                   {isEditing ? (
                     <Input
                       placeholder="請輸入公司名稱"
-                      value={cardData.company_name}
-                      onChange={(value) => handleFieldChange('company_name', value)}
+                      value={cardData.company_name_zh}
+                      onChange={(value) => handleFieldChange('company_name_zh', value)}
                     />
                   ) : (
                     <div style={{ padding: '8px 0', fontSize: '16px' }}>
-                      {cardData.company_name || '-'}
+                      {cardData.company_name_zh || '-'}
                     </div>
                   )}
                 </Form.Item>
@@ -345,12 +345,12 @@ const CardDetailPage = () => {
                   {isEditing ? (
                     <Input
                       placeholder="請輸入職位1"
-                      value={cardData.position}
-                      onChange={(value) => handleFieldChange('position', value)}
+                      value={cardData.position_zh}
+                      onChange={(value) => handleFieldChange('position_zh', value)}
                     />
                   ) : (
                     <div style={{ padding: '8px 0', fontSize: '16px' }}>
-                      {cardData.position || '-'}
+                      {cardData.position_zh || '-'}
                     </div>
                   )}
                 </Form.Item>
@@ -375,12 +375,12 @@ const CardDetailPage = () => {
                   {isEditing ? (
                     <Input
                       placeholder="請輸入職位2"
-                      value={cardData.position1}
-                      onChange={(value) => handleFieldChange('position1', value)}
+                      value={cardData.position1_zh}
+                      onChange={(value) => handleFieldChange('position1_zh', value)}
                     />
                   ) : (
                     <div style={{ padding: '8px 0', fontSize: '16px' }}>
-                      {cardData.position1 || '-'}
+                      {cardData.position1_zh || '-'}
                     </div>
                   )}
                 </Form.Item>
@@ -410,12 +410,12 @@ const CardDetailPage = () => {
                   {isEditing ? (
                     <Input
                       placeholder="請輸入第一層部門"
-                      value={cardData.department1}
-                      onChange={(value) => handleFieldChange('department1', value)}
+                      value={cardData.department1_zh}
+                      onChange={(value) => handleFieldChange('department1_zh', value)}
                     />
                   ) : (
                     <div style={{ padding: '8px 0', fontSize: '16px' }}>
-                      {cardData.department1 || '-'}
+                      {cardData.department1_zh || '-'}
                     </div>
                   )}
                 </Form.Item>
@@ -440,12 +440,12 @@ const CardDetailPage = () => {
                   {isEditing ? (
                     <Input
                       placeholder="請輸入第二層部門"
-                      value={cardData.department2}
-                      onChange={(value) => handleFieldChange('department2', value)}
+                      value={cardData.department2_zh}
+                      onChange={(value) => handleFieldChange('department2_zh', value)}
                     />
                   ) : (
                     <div style={{ padding: '8px 0', fontSize: '16px' }}>
-                      {cardData.department2 || '-'}
+                      {cardData.department2_zh || '-'}
                     </div>
                   )}
                 </Form.Item>
@@ -470,12 +470,12 @@ const CardDetailPage = () => {
                   {isEditing ? (
                     <Input
                       placeholder="請輸入第三層部門"
-                      value={cardData.department3}
-                      onChange={(value) => handleFieldChange('department3', value)}
+                      value={cardData.department3_zh}
+                      onChange={(value) => handleFieldChange('department3_zh', value)}
                     />
                   ) : (
                     <div style={{ padding: '8px 0', fontSize: '16px' }}>
-                      {cardData.department3 || '-'}
+                      {cardData.department3_zh || '-'}
                     </div>
                   )}
                 </Form.Item>
@@ -582,12 +582,12 @@ const CardDetailPage = () => {
                   {isEditing ? (
                     <Input
                       placeholder="請輸入公司地址"
-                      value={cardData.company_address1}
-                      onChange={(value) => handleFieldChange('company_address1', value)}
+                      value={cardData.company_address1_zh}
+                      onChange={(value) => handleFieldChange('company_address1_zh', value)}
                     />
                   ) : (
                     <div style={{ padding: '8px 0', fontSize: '16px' }}>
-                      {cardData.company_address1 || '-'}
+                      {cardData.company_address1_zh || '-'}
                     </div>
                   )}
                 </Form.Item>
@@ -612,12 +612,12 @@ const CardDetailPage = () => {
                   {isEditing ? (
                     <Input
                       placeholder="請輸入公司地址（補充）"
-                      value={cardData.company_address2}
-                      onChange={(value) => handleFieldChange('company_address2', value)}
+                      value={cardData.company_address2_zh}
+                      onChange={(value) => handleFieldChange('company_address2_zh', value)}
                     />
                   ) : (
                     <div style={{ padding: '8px 0', fontSize: '16px' }}>
-                      {cardData.company_address2 || '-'}
+                      {cardData.company_address2_zh || '-'}
                     </div>
                   )}
                 </Form.Item>
