@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+
+    <!-- App theme colors -->
+    <color name="primary">#667eea</color>
+    <color name="primary_dark">#5a67d8</color>
+    <color name="accent">#1890ff</color>
+
+    <!-- Status colors -->
+    <color name="status_complete">#52c41a</color>
+    <color name="status_good">#1890ff</color>
+    <color name="status_fair">#faad14</color>
+    <color name="status_incomplete">#f5222d</color>
+
+    <!-- Background colors -->
+    <color name="background_light">#f5f7fa</color>
+    <color name="card_background">#ffffff</color>
+    <color name="divider">#e0e0e0</color>
+</resources>

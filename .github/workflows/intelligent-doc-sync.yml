@@ -1,0 +1,34 @@
+name: 智能文档同步
+on:
+  push:
+    branches: [main]
+    paths: ['src/**', 'api/**', 'backend/**', 'frontend/**']
+
+jobs:
+  doc-sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: AI文档更新
+        uses: anthropics/claude-code-action@beta
+        with:
+          prompt: |
+            检查代码变更，智能更新文档：
+
+            1. API接口有没有变化？
+               - 新增/修改/删除的接口
+               - 参数和返回值变化
+               - 错误码更新
+
+            2. 更新相关文档：
+               - README的功能说明
+               - API文档
+               - 安装配置指南
+
+            3. 生成变更日志：
+               - 用户关心的功能更新
+               - 开发者注意事项
+               - 破坏性变更警告
+
+            如果文档需要大改，创建个PR让技术写手审查
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}

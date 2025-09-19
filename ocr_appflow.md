@@ -1,8 +1,8 @@
-# 名片OCR管理系統 應用流程文檔 v2.0
+# 名片OCR管理系統 應用流程文檔 v3.0
 
 ## 流程概覽
 
-本系統提供完整的名片數位化管理流程，從智能掃描到資料管理的全生命週期支援。
+本系統提供完整的名片數位化管理流程，從智能掃描到資料管理的全生命週期支援。系統採用前後端分離架構，前端React運行於端口1002，後端FastAPI運行於端口8006。
 
 ---
 
@@ -78,13 +78,13 @@ sequenceDiagram
     F->>U: 顯示掃描介面
     
     U->>F: 拍攝/上傳圖片
-    F->>B: 上傳圖片檔案
-    B->>CV: 智能圖像增強
+    F->>B: 上傳圖片檔案 (POST /api/v1/ocr/image)
+    B->>CV: OpenCV圖像增強 (3x放大、去噪)
     CV->>B: 返回增強圖像
-    B->>OCR: 發送OCR識別請求
-    OCR->>B: 返回識別文字
-    B->>B: 智能欄位解析
-    B->>F: 返回結構化資料
+    B->>OCR: 發送至OpenAI Vision API
+    OCR->>B: 返回結構化JSON資料
+    B->>B: 驗證並映射25個標準欄位
+    B->>F: 返回解析完成的JSON資料
     F->>U: 顯示編輯介面
     
     U->>F: 確認並保存
@@ -147,7 +147,7 @@ sequenceDiagram
 
 **技術實現**：
 ```javascript
-// 相機管理系統
+// 相機管理系統 (cameraManager.js)
 class CameraManager {
   async initializeCamera() {
     // 設備檢測與相機初始化
@@ -156,11 +156,11 @@ class CameraManager {
   }
 }
 
-// 上傳處理
+// 上傳處理 (ScanUploadPage.js)
 const handleFileUpload = async (file) => {
-  // 檔案驗證
-  // 圖像預處理
-  // 上傳進度追蹤
+  // 檔案驗證 (JPG/PNG, <10MB)
+  // 使用FormData上傳至 /api/v1/ocr/image
+  // 上傳進度追蹤與錯誤處理
 }
 ```
 
@@ -185,25 +185,26 @@ const handleFileUpload = async (file) => {
 #### 3.1 OCR文字識別
 **識別流程**：
 1. 圖像預處理完成後送入OCR引擎
-2. OpenAI視覺模型進行文字識別
-3. 支援中英文混合內容識別
-4. 返回原始OCR文字結果
+2. OpenAI Vision API使用結構化提示詞
+3. 直接返回JSON格式的25個標準欄位
+4. 無需額外的文字解析步驟
 
 **容錯機制**：
 - 最多3次重試機制
 - 超時處理 (30秒)
 - 網路異常處理
-- 模擬模式支援 (離線測試)
+- 支援本地OCR API備用方案
+- 圖像增強失敗時使用原圖重試
 
 #### 3.2 智能欄位解析
 **解析引擎**：
 ```python
-# 智能欄位解析示例
-def parse_ocr_to_fields(ocr_text: str) -> Dict[str, str]:
-    # 使用LLM進行智能欄位分類
-    # 支援25個標準化欄位
-    # 中英文對照處理
-    # 自動格式化與驗證
+# 智能欄位解析 (ocr_service.py)
+def parse_ocr_to_fields(ocr_text: str, side: str) -> Dict[str, str]:
+    # 檢查是否已是JSON格式 (來自OpenAI API)
+    # 若是JSON則直接驗證並返回
+    # 若否則使用LLM進行二次解析
+    # 確保返回25個標準化欄位
 ```
 
 **支援欄位結構**：
@@ -232,21 +233,39 @@ def parse_ocr_to_fields(ocr_text: str) -> Dict[str, str]:
 #### 4.2 資料品質檢查
 **健康度評估**：
 ```javascript
-// 名片健康度檢查邏輯
-const checkCardHealth = (cardData) => {
-  const requiredFields = [
-    { name: '姓名', check: (data) => data.name || data.name_en },
-    { name: '公司', check: (data) => data.company_name || data.company_name_en },
-    { name: '職位/部門', check: (data) => hasPositionOrDepartment(data) },
-    { name: '聯絡方式', check: (data) => hasContactInfo(data) }
-  ];
-  
-  const missingFields = requiredFields.filter(field => !field.check(cardData));
-  
+// 名片健康度檢查邏輯 (CardManagerPage.js)
+const checkCardStatus = (card) => {
+  const missingFields = [];
+
+  // 檢查姓名 (中文OR英文)
+  if (!card.name_zh?.trim() && !card.name_en?.trim()) {
+    missingFields.push('姓名');
+  }
+
+  // 檢查公司 (中文OR英文)
+  if (!card.company_name_zh?.trim() && !card.company_name_en?.trim()) {
+    missingFields.push('公司');
+  }
+
+  // 檢查職位或部門 (至少一個)
+  const hasPosition = Boolean(card.position_zh?.trim() || card.position_en?.trim() ||
+                             card.position1_zh?.trim() || card.position1_en?.trim());
+  const hasDepartment = Boolean(card.department1_zh?.trim() || card.department1_en?.trim() ||
+                                card.department2_zh?.trim() || card.department2_en?.trim() ||
+                                card.department3_zh?.trim() || card.department3_en?.trim());
+  if (!hasPosition && !hasDepartment) {
+    missingFields.push('職位或部門');
+  }
+
+  // 檢查聯絡方式 (至少一個)
+  if (!card.mobile_phone?.trim() && !card.company_phone1?.trim() &&
+      !card.company_phone2?.trim() && !card.email?.trim() && !card.line_id?.trim()) {
+    missingFields.push('聯絡方式');
+  }
+
   return {
     status: missingFields.length === 0 ? 'normal' : 'problem',
-    missingFields: missingFields.map(field => field.name),
-    score: (requiredFields.length - missingFields.length) / requiredFields.length
+    missingFields: missingFields
   };
 }
 ```
@@ -263,7 +282,7 @@ const checkCardHealth = (cardData) => {
 
 **搜尋實現**：
 ```python
-# 後端搜尋API
+# 後端搜尋API (card.py)
 @router.get("/")
 def list_cards(
     search: Optional[str] = None,
@@ -271,9 +290,9 @@ def list_cards(
     limit: int = 100,
     use_pagination: bool = False
 ):
-    # 支援多欄位搜尋
-    # 分頁效能優化
-    # 搜尋結果高亮
+    # 支援多欄位模糊搜尋 (姓名、公司、職位、聯絡方式)
+    # 分頁載入優化 (每頁20筆)
+    # 返回總數與分頁資訊
 ```
 
 #### 5.2 統計分析儀表板
@@ -310,15 +329,14 @@ def list_cards(
 
 **技術實現**：
 ```python
-class BatchProcessingService:
-    def __init__(self):
-        self.memory_threshold = 85  # 85%記憶體使用率
-        self.batch_size = 5  # 預設批次大小
-    
-    async def process_batch(self, image_files):
-        # 記憶體監控與自動清理
-        # 批次大小動態調整
-        # 失敗重試與錯誤處理
+# 批量處理服務 (ocr_service.py)
+class OCRService:
+    async def process_batch_images(self, folder_path: str):
+        # 記憶體監控 (psutil庫)
+        # 85%閾值自動調節批次大小
+        # 支援JPG/PNG格式
+        # 垃圾回收與臨時檔案清理
+        # 處理進度即時回報
 ```
 
 #### 6.2 文本批量匯入
@@ -463,39 +481,47 @@ flowchart TD
 ### 前端最佳化
 1. **懶載入 (Lazy Loading)**: 路由組件按需載入
 2. **圖片最佳化**: 縮圖預覽、漸進式載入
-3. **快取策略**: API回應快取、本地儲存
-4. **批次處理**: 分頁載入、虛擬滾動
+3. **分頁策略**: InfiniteScroll無限滾動，每頁20筆
+4. **狀態管理**: React Hooks與本地狀態管理
 
 ### 後端最佳化
-1. **資料庫最佳化**: 索引最佳化、查詢最佳化
-2. **記憶體管理**: 智能垃圾回收、記憶體監控
-3. **並行處理**: 非同步處理、工作佇列
-4. **快取層**: Redis快取、檔案快取
+1. **資料庫最佳化**: SQLAlchemy ORM查詢優化
+2. **記憶體管理**: psutil監控，85%閾值保護
+3. **異步處理**: FastAPI async/await非阻塞
+4. **檔案處理**: 臨時檔案自動清理
 
 ### OCR最佳化
-1. **圖像預處理**: 智能裁剪、品質增強
-2. **批次最佳化**: 批量處理、記憶體管控
-3. **容錯機制**: 重試邏輯、備用方案
-4. **效能監控**: 處理時間追蹤、品質指標
+1. **圖像預處理**: OpenCV 3倍放大增強
+2. **批次最佳化**: 動態批次大小，記憶體控制
+3. **容錯機制**: 3次重試，備用OCR API
+4. **JSON直傳**: 結構化提示詞減少解析步驟
 
 ---
 
 ## 監控與維護
 
 ### 系統監控指標
-- **效能指標**: 回應時間、處理量、錯誤率
-- **資源使用**: CPU、記憶體、磁碟、網路
-- **業務指標**: 名片處理量、識別準確率、用戶活躍度
-- **錯誤追蹤**: 異常日誌、錯誤分類、修復時間
+- **效能指標**: OCR處理時間(<10秒)、API響應時間(<500ms)
+- **資源使用**: 記憶體使用率(85%閾值)、CPU使用率
+- **業務指標**: 名片處理量、正常/問題名片比例
+- **錯誤追蹤**: OCR失敗率、重試次數、超時統計
 
-### 維護策略  
-- **定期備份**: 資料庫自動備份、檔案備份
-- **日誌管理**: 結構化日誌、日誌輪轉、分析報告
-- **效能調優**: 定期效能分析、瓶頸識別、最佳化建議
-- **安全更新**: 定期安全掃描、漏洞修復、依賴更新
+### 維護策略
+- **健康檢查**: `/health` 端點監控服務狀態
+- **配置管理**: `.env` 環境變數集中管理
+- **日誌管理**: FastAPI LoggingMiddleware記錄請求
+- **臨時檔案**: 自動清理機制避免磁碟累積
 
 ---
 
 ## 總結
 
-本應用流程文檔詳細描述了名片OCR管理系統的完整業務流程和技術實現。從用戶操作的角度出發，涵蓋了從名片掃描、OCR識別、資料編輯到管理匯出的全流程。透過豐富的流程圖和技術細節說明，為開發團隊提供了清晰的實現指導，確保系統的穩定性、可用性和優秀的用戶體驗。
+本應用流程文檔(v3.0)詳細描述了名片OCR管理系統的完整業務流程和技術實現。系統主要特點：
+
+- **智能OCR識別**: OpenAI Vision API直接返回結構化JSON，減少解析步驟
+- **圖像增強處理**: OpenCV 3倍放大與自動裁剪，提升識別準確率
+- **健康度檢查**: 四維度檢查確保名片資料完整性
+- **記憶體管理**: 85%閾值動態調節，防止系統過載
+- **前後端分離**: React(1002端口) + FastAPI(8006端口)架構
+
+系統已成功實現從名片掃描、OCR識別、資料編輯到批量處理的完整流程，為商務人士提供高效的名片數位化解決方案。

@@ -1,0 +1,1117 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>名片OCR管理系統 - UI示意圖</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+            background: #f5f7fa;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        h1 {
+            text-align: center;
+            color: #1890ff;
+            margin-bottom: 10px;
+            font-size: 32px;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+
+        .pages-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(375px, 1fr));
+            gap: 30px;
+            margin-bottom: 50px;
+        }
+
+        .page-wrapper {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+            overflow: hidden;
+        }
+
+        .page-title {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px 20px;
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .phone-frame {
+            width: 375px;
+            height: 700px;
+            border: 1px solid #e0e0e0;
+            background: white;
+            margin: 0 auto;
+            overflow-y: auto;
+            position: relative;
+        }
+
+        /* 通用元件樣式 */
+        .navbar {
+            background: #fff;
+            padding: 12px 15px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid #f0f0f0;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .navbar-title {
+            font-size: 17px;
+            font-weight: 600;
+            color: #333;
+            flex: 1;
+            text-align: center;
+        }
+
+        .navbar-back {
+            width: 24px;
+            height: 24px;
+            cursor: pointer;
+        }
+
+        .navbar-action {
+            color: #1890ff;
+            font-size: 14px;
+            cursor: pointer;
+        }
+
+        .button {
+            padding: 10px 20px;
+            border-radius: 8px;
+            border: none;
+            font-size: 15px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .button-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .button-primary:hover {
+            opacity: 0.9;
+        }
+
+        .button-secondary {
+            background: #f5f5f5;
+            color: #333;
+            border: 1px solid #e0e0e0;
+        }
+
+        .button-large {
+            width: calc(100% - 30px);
+            margin: 15px;
+            padding: 15px;
+            font-size: 16px;
+        }
+
+        .search-bar {
+            margin: 15px;
+            padding: 10px 15px;
+            background: #f5f5f5;
+            border-radius: 25px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .search-input {
+            flex: 1;
+            border: none;
+            background: none;
+            outline: none;
+            font-size: 14px;
+        }
+
+        .card {
+            margin: 15px;
+            padding: 15px;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+
+        .card-item {
+            margin: 10px 15px;
+            padding: 15px;
+            background: white;
+            border-radius: 10px;
+            border: 1px solid #f0f0f0;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .card-item:hover {
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+
+        .form-item {
+            margin: 15px;
+            margin-bottom: 20px;
+        }
+
+        .form-label {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 8px;
+            display: block;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 14px;
+            outline: none;
+        }
+
+        .form-input:focus {
+            border-color: #667eea;
+        }
+
+        .stats-container {
+            display: flex;
+            gap: 10px;
+            margin: 15px;
+        }
+
+        .stat-card {
+            flex: 1;
+            padding: 15px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 10px;
+            text-align: center;
+        }
+
+        .stat-number {
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            font-size: 12px;
+            opacity: 0.9;
+        }
+
+        .tag {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            margin-right: 5px;
+        }
+
+        .tag-success {
+            background: #e6f7ff;
+            color: #1890ff;
+        }
+
+        .tag-warning {
+            background: #fff7e6;
+            color: #fa8c16;
+        }
+
+        .tag-error {
+            background: #fff1f0;
+            color: #f5222d;
+        }
+
+        /* 特定頁面樣式 */
+        .home-banner {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 40px 20px;
+            text-align: center;
+            color: white;
+        }
+
+        .home-title {
+            font-size: 28px;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+
+        .home-subtitle {
+            font-size: 14px;
+            opacity: 0.9;
+            margin-bottom: 20px;
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+            padding: 20px 15px;
+        }
+
+        .feature-card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+        }
+
+        .feature-icon {
+            width: 48px;
+            height: 48px;
+            margin: 0 auto 10px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            color: white;
+        }
+
+        .feature-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 5px;
+        }
+
+        .feature-desc {
+            font-size: 12px;
+            color: #999;
+        }
+
+        .camera-preview {
+            width: 100%;
+            height: 300px;
+            background: #000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+
+        .camera-frame {
+            width: 280px;
+            height: 180px;
+            border: 2px dashed #fff;
+            border-radius: 8px;
+            opacity: 0.6;
+        }
+
+        .camera-hint {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: white;
+            font-size: 14px;
+            background: rgba(0,0,0,0.5);
+            padding: 5px 15px;
+            border-radius: 20px;
+        }
+
+        .image-preview {
+            margin: 15px;
+            border-radius: 8px;
+            overflow: hidden;
+            background: #f5f5f5;
+            min-height: 200px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .image-preview img {
+            max-width: 100%;
+            height: auto;
+        }
+
+        .upload-area {
+            margin: 15px;
+            padding: 40px 20px;
+            border: 2px dashed #d9d9d9;
+            border-radius: 8px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .upload-area:hover {
+            border-color: #667eea;
+            background: #f7f8fc;
+        }
+
+        .upload-icon {
+            font-size: 48px;
+            color: #667eea;
+            margin-bottom: 10px;
+        }
+
+        .tabs {
+            display: flex;
+            padding: 10px 15px;
+            background: white;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .tab {
+            flex: 1;
+            padding: 8px;
+            text-align: center;
+            font-size: 14px;
+            color: #666;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: all 0.3s;
+        }
+
+        .tab.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+        }
+
+        .empty-state {
+            padding: 60px 20px;
+            text-align: center;
+            color: #999;
+        }
+
+        .empty-icon {
+            font-size: 64px;
+            color: #e0e0e0;
+            margin-bottom: 15px;
+        }
+
+        .progress-bar {
+            margin: 15px;
+            height: 4px;
+            background: #f0f0f0;
+            border-radius: 2px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            transition: width 0.3s;
+        }
+
+        .section-title {
+            margin: 20px 15px 10px;
+            font-size: 16px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .info-row {
+            display: flex;
+            padding: 12px 15px;
+            border-bottom: 1px solid #f5f5f5;
+        }
+
+        .info-label {
+            width: 80px;
+            color: #999;
+            font-size: 14px;
+        }
+
+        .info-value {
+            flex: 1;
+            color: #333;
+            font-size: 14px;
+        }
+
+        .action-buttons {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: white;
+            padding: 15px;
+            display: flex;
+            gap: 10px;
+            box-shadow: 0 -2px 10px rgba(0,0,0,0.05);
+        }
+
+        .floating-button {
+            position: fixed;
+            bottom: 30px;
+            right: 20px;
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📇 名片OCR管理系統</h1>
+        <p class="subtitle">Business Card OCR Management System - UI示意圖</p>
+
+        <div class="pages-grid">
+            <!-- 1. 首頁 -->
+            <div class="page-wrapper">
+                <div class="page-title">首頁 - Home Page</div>
+                <div class="phone-frame">
+                    <div class="home-banner">
+                        <div class="home-title">名片OCR管理系統</div>
+                        <div class="home-subtitle">智能掃描・快速識別・高效管理</div>
+                    </div>
+
+                    <div class="features-grid">
+                        <div class="feature-card">
+                            <div class="feature-icon">📷</div>
+                            <div class="feature-title">掃描名片</div>
+                            <div class="feature-desc">相機即時掃描</div>
+                        </div>
+                        <div class="feature-card">
+                            <div class="feature-icon">📤</div>
+                            <div class="feature-title">上傳圖片</div>
+                            <div class="feature-desc">批量處理支援</div>
+                        </div>
+                        <div class="feature-card">
+                            <div class="feature-icon">📋</div>
+                            <div class="feature-title">名片管理</div>
+                            <div class="feature-desc">查看所有名片</div>
+                        </div>
+                        <div class="feature-card">
+                            <div class="feature-icon">➕</div>
+                            <div class="feature-title">手動新增</div>
+                            <div class="feature-desc">直接輸入資料</div>
+                        </div>
+                    </div>
+
+                    <div class="stats-container">
+                        <div class="stat-card">
+                            <div class="stat-number">1,245</div>
+                            <div class="stat-label">總名片數</div>
+                        </div>
+                        <div class="stat-card" style="background: linear-gradient(135deg, #56ccf2 0%, #2f80ed 100%);">
+                            <div class="stat-number">1,198</div>
+                            <div class="stat-label">正常名片</div>
+                        </div>
+                        <div class="stat-card" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+                            <div class="stat-number">47</div>
+                            <div class="stat-label">問題名片</div>
+                        </div>
+                    </div>
+
+                    <button class="button button-primary button-large">開始掃描</button>
+                </div>
+            </div>
+
+            <!-- 2. 掃描/上傳頁面 -->
+            <div class="page-wrapper">
+                <div class="page-title">掃描/上傳頁面 - Scan/Upload Page</div>
+                <div class="phone-frame">
+                    <div class="navbar">
+                        <span class="navbar-back">◀</span>
+                        <span class="navbar-title">掃描名片</span>
+                        <span class="navbar-action">歷史</span>
+                    </div>
+
+                    <div class="tabs">
+                        <div class="tab active">相機掃描</div>
+                        <div class="tab">圖片上傳</div>
+                    </div>
+
+                    <div class="camera-preview">
+                        <div class="camera-frame"></div>
+                        <div class="camera-hint">請將名片放置在框內</div>
+                    </div>
+
+                    <div class="card">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                            <span style="font-weight: 600;">掃描設定</span>
+                            <span class="tag tag-success">自動檢測</span>
+                        </div>
+                        <div style="display: flex; gap: 10px; margin-top: 15px;">
+                            <button class="button button-secondary" style="flex: 1;">閃光燈</button>
+                            <button class="button button-secondary" style="flex: 1;">切換鏡頭</button>
+                        </div>
+                    </div>
+
+                    <div class="upload-area">
+                        <div class="upload-icon">📁</div>
+                        <div>點擊或拖拽上傳圖片</div>
+                        <div style="font-size: 12px; color: #999; margin-top: 5px;">支援 JPG/PNG，最大 10MB</div>
+                    </div>
+
+                    <button class="button button-primary button-large">拍攝名片</button>
+                </div>
+            </div>
+
+            <!-- 3. OCR結果編輯頁面 -->
+            <div class="page-wrapper">
+                <div class="page-title">OCR結果編輯頁面 - OCR Result Edit Page</div>
+                <div class="phone-frame">
+                    <div class="navbar">
+                        <span class="navbar-back">◀</span>
+                        <span class="navbar-title">編輯名片資料</span>
+                        <span class="navbar-action">保存</span>
+                    </div>
+
+                    <div class="image-preview">
+                        <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='280' height='160' viewBox='0 0 280 160'%3E%3Crect width='280' height='160' fill='%23f0f0f0'/%3E%3Ctext x='140' y='80' text-anchor='middle' fill='%23999' font-size='14'%3E名片圖片預覽%3C/text%3E%3C/svg%3E" alt="名片預覽">
+                    </div>
+
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width: 100%;"></div>
+                    </div>
+                    <div style="text-align: center; font-size: 12px; color: #52c41a; margin: 5px;">✓ OCR識別完成</div>
+
+                    <div class="section-title">基本資訊</div>
+
+                    <div class="form-item">
+                        <label class="form-label">姓名（中文）</label>
+                        <input class="form-input" type="text" value="王大明" />
+                    </div>
+
+                    <div class="form-item">
+                        <label class="form-label">姓名（英文）</label>
+                        <input class="form-input" type="text" value="David Wang" />
+                    </div>
+
+                    <div class="form-item">
+                        <label class="form-label">公司名稱（中文）</label>
+                        <input class="form-input" type="text" value="科技創新有限公司" />
+                    </div>
+
+                    <div class="form-item">
+                        <label class="form-label">職位</label>
+                        <input class="form-input" type="text" value="技術總監" />
+                    </div>
+
+                    <div class="section-title">聯絡資訊</div>
+
+                    <div class="form-item">
+                        <label class="form-label">手機</label>
+                        <input class="form-input" type="text" value="0912-345-678" />
+                    </div>
+
+                    <div class="form-item">
+                        <label class="form-label">Email</label>
+                        <input class="form-input" type="text" value="david.wang@techcompany.com" />
+                    </div>
+
+                    <div style="height: 80px;"></div>
+
+                    <div class="action-buttons">
+                        <button class="button button-secondary" style="flex: 1;">取消</button>
+                        <button class="button button-primary" style="flex: 2;">保存名片</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 4. 名片管理頁面 -->
+            <div class="page-wrapper">
+                <div class="page-title">名片管理頁面 - Card Manager Page</div>
+                <div class="phone-frame">
+                    <div class="navbar">
+                        <span class="navbar-back">◀</span>
+                        <span class="navbar-title">名片管理</span>
+                        <span class="navbar-action">匯出</span>
+                    </div>
+
+                    <div class="search-bar">
+                        <span>🔍</span>
+                        <input class="search-input" type="text" placeholder="搜尋姓名、公司、職位..." />
+                    </div>
+
+                    <div class="tabs">
+                        <div class="tab active">全部 (1245)</div>
+                        <div class="tab">正常 (1198)</div>
+                        <div class="tab">問題 (47)</div>
+                    </div>
+
+                    <div class="card-item">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <div style="font-weight: 600; font-size: 16px;">王大明</div>
+                                <div style="font-size: 12px; color: #999;">David Wang</div>
+                            </div>
+                            <span class="tag tag-success">正常</span>
+                        </div>
+                        <div style="margin-top: 10px; font-size: 14px; color: #666;">
+                            <div>🏢 科技創新有限公司 | 技術總監</div>
+                            <div>📱 0912-345-678</div>
+                            <div>✉️ david.wang@techcompany.com</div>
+                        </div>
+                    </div>
+
+                    <div class="card-item">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <div style="font-weight: 600; font-size: 16px;">李小華</div>
+                                <div style="font-size: 12px; color: #999;">Lisa Lee</div>
+                            </div>
+                            <span class="tag tag-warning">缺少資料</span>
+                        </div>
+                        <div style="margin-top: 10px; font-size: 14px; color: #666;">
+                            <div>🏢 資訊科技股份有限公司 | 業務經理</div>
+                            <div>📱 0923-456-789</div>
+                            <div style="color: #fa8c16;">⚠️ 缺少 Email</div>
+                        </div>
+                    </div>
+
+                    <div class="card-item">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <div style="font-weight: 600; font-size: 16px;">張志明</div>
+                                <div style="font-size: 12px; color: #999;">James Chang</div>
+                            </div>
+                            <span class="tag tag-success">正常</span>
+                        </div>
+                        <div style="margin-top: 10px; font-size: 14px; color: #666;">
+                            <div>🏢 國際貿易有限公司 | 總經理</div>
+                            <div>📱 0934-567-890</div>
+                            <div>✉️ james@trade.com</div>
+                        </div>
+                    </div>
+
+                    <div class="floating-button">+</div>
+                </div>
+            </div>
+
+            <!-- 5. 名片詳情頁面 -->
+            <div class="page-wrapper">
+                <div class="page-title">名片詳情頁面 - Card Detail Page</div>
+                <div class="phone-frame">
+                    <div class="navbar">
+                        <span class="navbar-back">◀</span>
+                        <span class="navbar-title">名片詳情</span>
+                        <span class="navbar-action">編輯</span>
+                    </div>
+
+                    <div class="card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
+                        <div style="text-align: center; padding: 20px;">
+                            <div style="width: 80px; height: 80px; background: white; border-radius: 50%; margin: 0 auto 15px; display: flex; align-items: center; justify-content: center; font-size: 36px; color: #667eea;">
+                                👤
+                            </div>
+                            <div style="font-size: 24px; font-weight: bold;">王大明</div>
+                            <div style="font-size: 14px; opacity: 0.9; margin-top: 5px;">David Wang</div>
+                            <div style="font-size: 16px; margin-top: 10px;">技術總監</div>
+                            <div style="font-size: 14px; opacity: 0.9;">科技創新有限公司</div>
+                        </div>
+                    </div>
+
+                    <div class="section-title">聯絡資訊</div>
+
+                    <div class="info-row">
+                        <div class="info-label">手機</div>
+                        <div class="info-value">0912-345-678</div>
+                    </div>
+
+                    <div class="info-row">
+                        <div class="info-label">公司電話</div>
+                        <div class="info-value">02-2345-6789</div>
+                    </div>
+
+                    <div class="info-row">
+                        <div class="info-label">Email</div>
+                        <div class="info-value">david.wang@techcompany.com</div>
+                    </div>
+
+                    <div class="info-row">
+                        <div class="info-label">Line ID</div>
+                        <div class="info-value">davidwang123</div>
+                    </div>
+
+                    <div class="section-title">公司資訊</div>
+
+                    <div class="info-row">
+                        <div class="info-label">部門</div>
+                        <div class="info-value">研發部 / 技術中心</div>
+                    </div>
+
+                    <div class="info-row">
+                        <div class="info-label">地址</div>
+                        <div class="info-value">台北市信義區信義路五段7號</div>
+                    </div>
+
+                    <div class="section-title">其他資訊</div>
+
+                    <div class="info-row">
+                        <div class="info-label">建立時間</div>
+                        <div class="info-value">2024-01-15 14:30</div>
+                    </div>
+
+                    <div class="info-row">
+                        <div class="info-label">來源</div>
+                        <div class="info-value">OCR掃描</div>
+                    </div>
+
+                    <div style="height: 80px;"></div>
+
+                    <div class="action-buttons">
+                        <button class="button button-secondary" style="flex: 1;">刪除</button>
+                        <button class="button button-secondary" style="flex: 1;">分享</button>
+                        <button class="button button-primary" style="flex: 1;">編輯</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 6. 批量處理頁面 -->
+            <div class="page-wrapper">
+                <div class="page-title">批量處理頁面 - Batch Process Page</div>
+                <div class="phone-frame">
+                    <div class="navbar">
+                        <span class="navbar-back">◀</span>
+                        <span class="navbar-title">批量處理</span>
+                        <span class="navbar-action">開始</span>
+                    </div>
+
+                    <div class="tabs">
+                        <div class="tab active">圖片批量</div>
+                        <div class="tab">Excel匯入</div>
+                        <div class="tab">CSV匯入</div>
+                    </div>
+
+                    <div class="card">
+                        <div style="font-weight: 600; margin-bottom: 15px;">批量上傳設定</div>
+                        <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                            <span class="tag tag-success">✓ 自動增強</span>
+                            <span class="tag tag-success">✓ 智能裁剪</span>
+                            <span class="tag tag-success">✓ OCR識別</span>
+                        </div>
+                        <div style="font-size: 12px; color: #999;">
+                            支援格式：JPG、PNG<br>
+                            單檔限制：10MB<br>
+                            批量限制：50個檔案
+                        </div>
+                    </div>
+
+                    <div class="upload-area">
+                        <div class="upload-icon">📂</div>
+                        <div>選擇多個名片圖片</div>
+                        <div style="font-size: 12px; color: #999; margin-top: 5px;">已選擇 0 個檔案</div>
+                    </div>
+
+                    <div class="card">
+                        <div style="font-weight: 600; margin-bottom: 10px;">處理進度</div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: 0%;"></div>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; margin-top: 10px; font-size: 12px; color: #666;">
+                            <span>準備就緒</span>
+                            <span>0 / 0</span>
+                        </div>
+                    </div>
+
+                    <div class="card" style="background: #f7f8fc;">
+                        <div style="font-weight: 600; margin-bottom: 10px;">批量處理統計</div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 14px;">
+                            <div>📊 總處理數：<strong>0</strong></div>
+                            <div>✅ 成功數：<strong>0</strong></div>
+                            <div>⏭️ 跳過數：<strong>0</strong></div>
+                            <div>❌ 失敗數：<strong>0</strong></div>
+                        </div>
+                    </div>
+
+                    <button class="button button-primary button-large">開始批量處理</button>
+                </div>
+            </div>
+
+            <!-- 7. 統計儀表板頁面 -->
+            <div class="page-wrapper">
+                <div class="page-title">統計儀表板 - Statistics Dashboard</div>
+                <div class="phone-frame">
+                    <div class="navbar">
+                        <span class="navbar-back">◀</span>
+                        <span class="navbar-title">統計分析</span>
+                        <span class="navbar-action">匯出報表</span>
+                    </div>
+
+                    <div class="stats-container">
+                        <div class="stat-card">
+                            <div class="stat-number">1,245</div>
+                            <div class="stat-label">總名片數</div>
+                        </div>
+                        <div class="stat-card" style="background: linear-gradient(135deg, #56ccf2 0%, #2f80ed 100%);">
+                            <div class="stat-number">96.2%</div>
+                            <div class="stat-label">資料完整率</div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div style="font-weight: 600; margin-bottom: 15px;">名片健康度分析</div>
+                        <div style="text-align: center; padding: 20px;">
+                            <div style="width: 120px; height: 120px; margin: 0 auto; border-radius: 50%; background: conic-gradient(#52c41a 0deg 345deg, #fa8c16 345deg 360deg); display: flex; align-items: center; justify-content: center;">
+                                <div style="width: 100px; height: 100px; background: white; border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+                                    <div style="font-size: 24px; font-weight: bold;">96.2%</div>
+                                    <div style="font-size: 12px; color: #999;">正常</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div style="display: flex; justify-content: center; gap: 20px; margin-top: 10px;">
+                            <div style="display: flex; align-items: center; gap: 5px;">
+                                <span style="width: 12px; height: 12px; background: #52c41a; border-radius: 2px;"></span>
+                                <span style="font-size: 12px;">正常 1,198</span>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 5px;">
+                                <span style="width: 12px; height: 12px; background: #fa8c16; border-radius: 2px;"></span>
+                                <span style="font-size: 12px;">問題 47</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div style="font-weight: 600; margin-bottom: 15px;">缺失欄位 TOP 5</div>
+                        <div style="font-size: 14px;">
+                            <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #f5f5f5;">
+                                <span>1. Email</span>
+                                <span style="color: #fa8c16;">23 筆</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #f5f5f5;">
+                                <span>2. 英文姓名</span>
+                                <span style="color: #fa8c16;">18 筆</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #f5f5f5;">
+                                <span>3. Line ID</span>
+                                <span style="color: #fa8c16;">15 筆</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #f5f5f5;">
+                                <span>4. 公司地址</span>
+                                <span style="color: #fa8c16;">12 筆</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; padding: 8px 0;">
+                                <span>5. 部門</span>
+                                <span style="color: #fa8c16;">8 筆</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div style="font-weight: 600; margin-bottom: 15px;">匯入來源統計</div>
+                        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; text-align: center;">
+                            <div style="padding: 10px; background: #f7f8fc; border-radius: 8px;">
+                                <div style="font-size: 20px; font-weight: bold; color: #667eea;">856</div>
+                                <div style="font-size: 12px; color: #999;">OCR掃描</div>
+                            </div>
+                            <div style="padding: 10px; background: #f7f8fc; border-radius: 8px;">
+                                <div style="font-size: 20px; font-weight: bold; color: #667eea;">234</div>
+                                <div style="font-size: 12px; color: #999;">Excel匯入</div>
+                            </div>
+                            <div style="padding: 10px; background: #f7f8fc; border-radius: 8px;">
+                                <div style="font-size: 20px; font-weight: bold; color: #667eea;">155</div>
+                                <div style="font-size: 12px; color: #999;">手動輸入</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 8. 設定頁面 -->
+            <div class="page-wrapper">
+                <div class="page-title">設定頁面 - Settings Page</div>
+                <div class="phone-frame">
+                    <div class="navbar">
+                        <span class="navbar-back">◀</span>
+                        <span class="navbar-title">系統設定</span>
+                        <span class="navbar-action">保存</span>
+                    </div>
+
+                    <div class="section-title">掃描設定</div>
+
+                    <div class="card">
+                        <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0;">
+                            <div>
+                                <div style="font-weight: 500;">自動增強圖片</div>
+                                <div style="font-size: 12px; color: #999;">提升OCR識別準確率</div>
+                            </div>
+                            <label style="position: relative; display: inline-block; width: 50px; height: 28px;">
+                                <input type="checkbox" checked style="opacity: 0; width: 0; height: 0;">
+                                <span style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background: #667eea; border-radius: 34px;">
+                                    <span style="position: absolute; content: ''; height: 20px; width: 20px; left: 4px; bottom: 4px; background: white; border-radius: 50%; transform: translateX(22px);"></span>
+                                </span>
+                            </label>
+                        </div>
+
+                        <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0;">
+                            <div>
+                                <div style="font-weight: 500;">智能裁剪</div>
+                                <div style="font-size: 12px; color: #999;">自動識別名片邊界</div>
+                            </div>
+                            <label style="position: relative; display: inline-block; width: 50px; height: 28px;">
+                                <input type="checkbox" checked style="opacity: 0; width: 0; height: 0;">
+                                <span style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background: #667eea; border-radius: 34px;">
+                                    <span style="position: absolute; content: ''; height: 20px; width: 20px; left: 4px; bottom: 4px; background: white; border-radius: 50%; transform: translateX(22px);"></span>
+                                </span>
+                            </label>
+                        </div>
+
+                        <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0;">
+                            <div>
+                                <div style="font-weight: 500;">批量處理模式</div>
+                                <div style="font-size: 12px; color: #999;">記憶體優化處理</div>
+                            </div>
+                            <label style="position: relative; display: inline-block; width: 50px; height: 28px;">
+                                <input type="checkbox" style="opacity: 0; width: 0; height: 0;">
+                                <span style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background: #ccc; border-radius: 34px;">
+                                    <span style="position: absolute; content: ''; height: 20px; width: 20px; left: 4px; bottom: 4px; background: white; border-radius: 50%;"></span>
+                                </span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="section-title">OCR引擎</div>
+
+                    <div class="card">
+                        <div style="padding: 10px 0;">
+                            <label style="display: flex; align-items: center; gap: 10px;">
+                                <input type="radio" name="ocr" checked>
+                                <div>
+                                    <div style="font-weight: 500;">OpenAI Vision API</div>
+                                    <div style="font-size: 12px; color: #999;">高精度識別，支援中英文</div>
+                                </div>
+                            </label>
+                        </div>
+                        <div style="padding: 10px 0;">
+                            <label style="display: flex; align-items: center; gap: 10px;">
+                                <input type="radio" name="ocr">
+                                <div>
+                                    <div style="font-weight: 500;">本地OCR服務</div>
+                                    <div style="font-size: 12px; color: #999;">離線使用，速度較快</div>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="section-title">資料管理</div>
+
+                    <div class="card">
+                        <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #f5f5f5;">
+                            <span>匯出格式</span>
+                            <span style="color: #667eea;">CSV, Excel, vCard ›</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #f5f5f5;">
+                            <span>自動備份</span>
+                            <span style="color: #667eea;">每日 ›</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0;">
+                            <span>清理重複資料</span>
+                            <span style="color: #667eea;">執行 ›</span>
+                        </div>
+                    </div>
+
+                    <div class="section-title">關於系統</div>
+
+                    <div class="card">
+                        <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #f5f5f5;">
+                            <span>版本</span>
+                            <span style="color: #999;">v3.0.0</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #f5f5f5;">
+                            <span>資料庫</span>
+                            <span style="color: #999;">1,245 筆記錄</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0;">
+                            <span>系統健康度</span>
+                            <span style="color: #52c41a;">正常運作</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div style="margin-top: 50px; padding: 30px; background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
+            <h2 style="color: #333; margin-bottom: 20px;">📋 功能特色說明</h2>
+
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px;">
+                <div>
+                    <h3 style="color: #667eea; font-size: 18px; margin-bottom: 10px;">🎯 核心功能</h3>
+                    <ul style="color: #666; line-height: 1.8;">
+                        <li>智能OCR識別 - OpenAI Vision API整合</li>
+                        <li>圖像增強處理 - OpenCV 3倍放大</li>
+                        <li>25個標準欄位 - 中英文對照支援</li>
+                        <li>批量處理 - 記憶體智能管理</li>
+                        <li>資料健康度檢測 - 自動品質評估</li>
+                    </ul>
+                </div>
+
+                <div>
+                    <h3 style="color: #667eea; font-size: 18px; margin-bottom: 10px;">💡 技術特色</h3>
+                    <ul style="color: #666; line-height: 1.8;">
+                        <li>前後端分離架構 - React + FastAPI</li>
+                        <li>響應式設計 - 移動端優先</li>
+                        <li>即時搜索 - 高效資料檢索</li>
+                        <li>智能欄位映射 - LLM解析</li>
+                        <li>多格式匯出 - CSV/Excel/vCard</li>
+                    </ul>
+                </div>
+
+                <div>
+                    <h3 style="color: #667eea; font-size: 18px; margin-bottom: 10px;">📊 性能指標</h3>
+                    <ul style="color: #666; line-height: 1.8;">
+                        <li>單張OCR處理 < 10秒</li>
+                        <li>批量100張 < 5分鐘</li>
+                        <li>支援10萬筆記錄</li>
+                        <li>記憶體使用 < 85%</li>
+                        <li>並發處理 10個連線</li>
+                    </ul>
+                </div>
+
+                <div>
+                    <h3 style="color: #667eea; font-size: 18px; margin-bottom: 10px;">🔒 安全保障</h3>
+                    <ul style="color: #666; line-height: 1.8;">
+                        <li>SQL注入防護</li>
+                        <li>檔案類型檢查</li>
+                        <li>大小限制控制</li>
+                        <li>敏感資料保護</li>
+                        <li>自動備份機制</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div style="text-align: center; margin-top: 30px; padding: 20px; color: #999; font-size: 14px;">
+            <p>名片OCR管理系統 v3.0 - UI示意圖</p>
+            <p>Business Card OCR Management System © 2024</p>
+        </div>
+    </div>
+</body>
+</html>

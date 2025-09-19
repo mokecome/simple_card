@@ -1,0 +1,83 @@
+<resources>
+    <string name="app_name">名片管理系统</string>
+
+    <!-- 主页面 -->
+    <string name="home_title">名片管理系统</string>
+    <string name="home_subtitle">智能扫描・快速识别・高效管理</string>
+    <string name="scan_card">扫描名片</string>
+    <string name="upload_image">上传图片</string>
+    <string name="card_management">名片管理</string>
+    <string name="add_card">手动新增</string>
+    <string name="start_scan">开始扫描</string>
+
+    <!-- 扫描页面 -->
+    <string name="scan_title">扫描名片</string>
+    <string name="camera_scan">相机扫描</string>
+    <string name="image_upload">图片上传</string>
+    <string name="capture_hint">请将名片放置在框内</string>
+    <string name="capture_photo">拍摄名片</string>
+    <string name="select_image">选择图片</string>
+    <string name="processing">处理中...</string>
+
+    <!-- 名片管理 -->
+    <string name="card_list">名片列表</string>
+    <string name="search_hint">搜索姓名、公司、职位...</string>
+    <string name="total_cards">总名片数</string>
+    <string name="normal_cards">正常名片</string>
+    <string name="problem_cards">问题名片</string>
+    <string name="card_detail">名片详情</string>
+    <string name="edit_card">编辑名片</string>
+    <string name="delete_card">删除名片</string>
+
+    <!-- 名片信息 -->
+    <string name="name_zh">姓名（中文）</string>
+    <string name="name_en">姓名（英文）</string>
+    <string name="company_zh">公司名称（中文）</string>
+    <string name="company_en">公司名称（英文）</string>
+    <string name="position_zh">职位（中文）</string>
+    <string name="position_en">职位（英文）</string>
+    <string name="department">部门</string>
+    <string name="mobile_phone">手机</string>
+    <string name="company_phone">公司电话</string>
+    <string name="email">邮箱</string>
+    <string name="line_id">Line ID</string>
+    <string name="address">地址</string>
+    <string name="note">备注</string>
+
+    <!-- 按钮 -->
+    <string name="save">保存</string>
+    <string name="cancel">取消</string>
+    <string name="edit">编辑</string>
+    <string name="delete">删除</string>
+    <string name="export">导出</string>
+    <string name="back">返回</string>
+    <string name="confirm">确认</string>
+
+    <!-- 状态 -->
+    <string name="status_normal">正常</string>
+    <string name="status_incomplete">缺少资料</string>
+    <string name="status_error">错误</string>
+    <string name="ocr_success">OCR识别完成</string>
+    <string name="save_success">保存成功</string>
+    <string name="delete_success">删除成功</string>
+
+    <!-- 错误信息 -->
+    <string name="error_network">网络连接失败</string>
+    <string name="error_camera">相机启动失败</string>
+    <string name="error_permission">权限未授予</string>
+    <string name="error_ocr">OCR识别失败</string>
+    <string name="error_save">保存失败</string>
+    <string name="error_delete">删除失败</string>
+
+    <!-- 权限 -->
+    <string name="permission_camera_title">相机权限</string>
+    <string name="permission_camera_message">需要相机权限来扫描名片</string>
+    <string name="permission_storage_title">存储权限</string>
+    <string name="permission_storage_message">需要存储权限来保存图片</string>
+    <string name="permission_granted">权限已授予</string>
+    <string name="permission_denied">权限被拒绝</string>
+
+    <!-- 空状态 -->
+    <string name="empty_cards">暂无名片数据</string>
+    <string name="empty_search">未找到相关名片</string>
+</resources>

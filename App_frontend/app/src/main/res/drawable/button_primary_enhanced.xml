@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 按下狀態 -->
+    <item android:state_pressed="true">
+        <layer-list>
+            <!-- 陰影層 -->
+            <item>
+                <shape android:shape="rectangle">
+                    <corners android:radius="12dp" />
+                    <solid android:color="#40000000" />
+                    <padding android:top="2dp" />
+                </shape>
+            </item>
+            <!-- 主按鈕層 -->
+            <item android:bottom="2dp">
+                <shape android:shape="rectangle">
+                    <corners android:radius="12dp" />
+                    <gradient
+                        android:startColor="#5A67D8"
+                        android:endColor="#4C51BF"
+                        android:angle="270" />
+                </shape>
+            </item>
+        </layer-list>
+    </item>
+
+    <!-- 默認狀態 -->
+    <item>
+        <layer-list>
+            <!-- 陰影層 -->
+            <item>
+                <shape android:shape="rectangle">
+                    <corners android:radius="12dp" />
+                    <solid android:color="#20000000" />
+                    <padding android:top="3dp" />
+                </shape>
+            </item>
+            <!-- 主按鈕層 -->
+            <item android:bottom="3dp">
+                <shape android:shape="rectangle">
+                    <corners android:radius="12dp" />
+                    <gradient
+                        android:startColor="#667EEA"
+                        android:endColor="#5A67D8"
+                        android:angle="270" />
+                </shape>
+            </item>
+        </layer-list>
+    </item>
+</selector>
