@@ -44,9 +44,9 @@ jobs:
 
       - name: Build the  Docker image
         run:
-          | # 使用 上一步写的 Dockerfile 构建镜像并发布到私有仓库； 发布完成可以去 https://github.com/MrGaoGang?tab=packages 查看
-          docker build . --file Dockerfile --tag ghcr.io/你的github名称/web-image:latest 
-          docker push ghcr.io/你的github名称/web-image:latest
+          | # 使用 上一步写的 Dockerfile 构建镜像并发布到私有仓库； 发布完成可以去 https://github.com/mokecome?tab=packages 查看
+          docker build . --file Dockerfile --tag ghcr.io/mokecome/web-image:latest 
+          docker push ghcr.io/mokecome/web-image:latest
       - name: 更新服务器
         uses: appleboy/ssh-action@v0.1.10
         with:
@@ -57,8 +57,8 @@ jobs:
           script: | # 重启更新镜像
             docker stop web-image 
             docker rm web-image 
-            docker login -u 你的github名称 -p 你的github token https://ghcr.io 
-            docker pull ghcr.io/你的github名称/web-image:latest 
-            docker run -dp 80:80  --restart=always --name web-image ghcr.io/你的github名称/web-image
+            docker login -u ${{ github.actor }} -p ${{ secrets.HUB_GITHUB_TOKEN }} https://ghcr.io
+            docker pull ghcr.io/${{ github.actor }}/web-image:latest 
+            docker run -dp 80:80  --restart=always --name web-image ghcr.io/${{ github.actor }}/web-image
 
         # 上面使用 80端口启动，当然你也可以换成自己想要的端口
