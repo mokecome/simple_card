@@ -45,8 +45,8 @@ jobs:
       - name: Build the  Docker image
         run:
           | # 使用 上一步写的 Dockerfile 构建镜像并发布到私有仓库； 发布完成可以去 https://github.com/mokecome?tab=packages 查看
-          docker build . --file Dockerfile --tag ghcr.io/mokecome/web-image:latest 
-          docker push ghcr.io/mokecome/web-image:latest
+          docker build . --file Dockerfile --tag ghcr.io/${{ github.actor }}/ocr-management-system:latest 
+          docker push ghcr.io/${{ github.actor }}/ocr-management-system:latest
       - name: 更新服务器
         uses: appleboy/ssh-action@v0.1.10
         with:
@@ -55,10 +55,10 @@ jobs:
           password: ${{ secrets.SERVER_PWD }} # 服务器密码；需要去仓库的 settings/secrets/actions 去创建
           port: ${{ secrets.SERVER_PORT }} # 服务器端口，默认22；需要去仓库的 settings/secrets/actions 去创建
           script: | # 重启更新镜像
-            docker stop web-image 
-            docker rm web-image 
+            docker stop ocr-management-system
+            docker rm ocr-management-system 
             docker login -u ${{ github.actor }} -p ${{ secrets.HUB_GITHUB_TOKEN }} https://ghcr.io
-            docker pull ghcr.io/${{ github.actor }}/web-image:latest 
-            docker run -dp 80:80  --restart=always --name web-image ghcr.io/${{ github.actor }}/web-image
+            docker pull ghcr.io/${{ github.actor }}/ocr-management-system:latest 
+            docker run -dp 80:80  --restart=always --name web-image ghcr.io/${{ github.actor }}/ocr-management-system
 
         # 上面使用 80端口启动，当然你也可以换成自己想要的端口
