@@ -59,6 +59,6 @@ jobs:
             docker rm ocr-management-system 
             docker login -u ${{ github.actor }} -p ${{ secrets.HUB_GITHUB_TOKEN }} https://ghcr.io
             docker pull ghcr.io/${{ github.actor }}/ocr-management-system:latest 
-            docker run -dp 80:80  --restart=always --name web-image ghcr.io/${{ github.actor }}/ocr-management-system
+            docker run -dp 80:80  --restart=always --name ocr-management-system ghcr.io/${{ github.actor }}/ocr-management-system
 
         # 上面使用 80端口启动，当然你也可以换成自己想要的端口
