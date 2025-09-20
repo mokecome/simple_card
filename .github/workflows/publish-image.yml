@@ -1,64 +1,60 @@
-name: Publish Image
+#
+name: Create and publish a Docker image
 
+# Configures this workflow to run every time a change is pushed to the branch called `release`.
 on:
-  push: # push 到主分支自动 发布
-    branches: ["main"]
-    paths-ignore: # 忽略一些不必要的文件
-      - ".gitignore"
-      - "README.md"
-      - ".vscode/**"
-  pull_request:
-    branches: ["main"]
+  push:
+    branches: ['release']
 
+# Defines two custom environment variables for the workflow. These are used for the Container registry domain, and a name for the Docker image that this workflow builds.
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+# There is a single job in this workflow. It's configured to run on the latest available version of Ubuntu.
 jobs:
-  build:
+  build-and-push-image:
     runs-on: ubuntu-latest
+    # Sets the permissions granted to the `GITHUB_TOKEN` for the actions in this job.
+    permissions:
+      contents: read
+      packages: write
+      attestations: write
+      id-token: write
+      #
     steps:
-      - uses: actions/checkout@v3
-      - uses: docker/login-action@v1
+      - name: Checkout repository
+        uses: actions/checkout@v5
+      # Uses the `docker/login-action` action to log in to the Container registry registry using the account and password that will publish the packages. Once published, the packages are scoped to the account defined here.
+      - name: Log in to the Container registry
+        uses: docker/login-action@65b78e6e13532edd9afa3aa52ac7964289d1a9c1
         with:
-          registry: ghcr.io # 声明镜像源
-          username: ${{ github.actor }} # 当前github 用户名
-          password: ${{ secrets.HUB_GITHUB_TOKEN }} # 需要去 https://github.com/settings/tokens 生成一个 名为 token，注意此token 需要读写 packages 等权限 
-      - uses: actions/setup-node@v2
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # This step uses [docker/metadata-action](https://github.com/docker/metadata-action#about) to extract tags and labels that will be applied to the specified image. The `id` "meta" allows the output of this step to be referenced in a subsequent step. The `images` value provides the base name for the tags and labels.
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@9ec57ed1fcdbf14dcef7dfbe97b2010124a938b7
         with:
-          node-version: "16.14"
-      - uses: actions/cache@v2
-        id: cache
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+      # This step uses the `docker/build-push-action` action to build the image, based on your repository's `Dockerfile`. If the build succeeds, it pushes the image to GitHub Packages.
+      # It uses the `context` parameter to define the build's context as the set of files located in the specified path. For more information, see [Usage](https://github.com/docker/build-push-action#usage) in the README of the `docker/build-push-action` repository.
+      # It uses the `tags` and `labels` parameters to tag and label the image with the output from the "meta" step.
+      - name: Build and push Docker image
+        id: push
+        uses: docker/build-push-action@f2a1d5e99d037542a71f64918e516c093c6f3fc4
         with:
-          path: node_modules
-          key: ${{ runner.os }}-node-${{ hashFiles('package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-node-
-        # Runs a single command using the runners shell
-      - name: pnpm install
-        run: npm install -g pnpm --registry https://registry.npm.taobao.org
-      - name: Install
-        if: steps.cache.outputs.cache-hit != 'true'
-        run: npm config set registry https://registry.npm.taobao.org && pnpm i
-
-      - name: Build
-        run: npm run build
-      - name: Show Dir
-        run: ls
-
-      - name: Build the  Docker image
-        run:
-          | # 使用 上一步写的 Dockerfile 构建镜像并发布到私有仓库； 发布完成可以去 https://github.com/mokecome?tab=packages 查看
-          docker build . --file Dockerfile --tag ghcr.io/${{ github.actor }}/ocr-management-system:latest 
-          docker push ghcr.io/${{ github.actor }}/ocr-management-system:latest
-      - name: 更新服务器
-        uses: appleboy/ssh-action@v0.1.10
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+      
+      # This step generates an artifact attestation for the image, which is an unforgeable statement about where and how it was built. It increases supply chain security for people who consume the image. For more information, see [Using artifact attestations to establish provenance for builds](/actions/security-guides/using-artifact-attestations-to-establish-provenance-for-builds).
+      - name: Generate artifact attestation
+        uses: actions/attest-build-provenance@v3
         with:
-          host: ${{ secrets.SERVER_HOST }} # 服务器ip地址 ; 需要去仓库的 settings/secrets/actions 去创建
-          username: ${{ secrets.SERVER_USER }} # 服务器用户名称；需要去仓库的 settings/secrets/actions 去创建
-          password: ${{ secrets.SERVER_PWD }} # 服务器密码；需要去仓库的 settings/secrets/actions 去创建
-          port: ${{ secrets.SERVER_PORT }} # 服务器端口，默认22；需要去仓库的 settings/secrets/actions 去创建
-          script: | # 重启更新镜像
-            docker stop ocr-management-system
-            docker rm ocr-management-system 
-            docker login -u ${{ github.actor }} -p ${{ secrets.HUB_GITHUB_TOKEN }} https://ghcr.io
-            docker pull ghcr.io/${{ github.actor }}/ocr-management-system:latest 
-            docker run -dp 80:80  --restart=always --name ocr-management-system ghcr.io/${{ github.actor }}/ocr-management-system
-
-        # 上面使用 80端口启动，当然你也可以换成自己想要的端口
+          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME}}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+      
