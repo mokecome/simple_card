@@ -292,9 +292,9 @@ const CardDetailPage = () => {
             extra={<PictureOutline />}
             style={{ marginBottom: '16px' }}
           >
-            <div style={{ display: 'flex', gap: '12px', flexDirection: 'column', alignItems: 'center' }}>
+            <div style={{ display: 'flex', gap: '12px', flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center' }}>
               {cardData.front_image_path && (
-                <div style={{ width: '100%', maxWidth: '320px' }}>
+                <div style={{ flex: '0 0 auto', width: '100%', maxWidth: '280px' }}>
                   <div style={{
                     fontSize: '13px',
                     fontWeight: 'bold',
@@ -338,7 +338,7 @@ const CardDetailPage = () => {
                 </div>
               )}
               {cardData.back_image_path && (
-                <div style={{ width: '100%', maxWidth: '320px' }}>
+                <div style={{ flex: '0 0 auto', width: '100%', maxWidth: '280px' }}>
                   <div style={{
                     fontSize: '13px',
                     fontWeight: 'bold',
