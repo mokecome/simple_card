@@ -13,13 +13,15 @@ import {
   Loading,
   Dialog
 } from 'antd-mobile';
-import { 
-  CheckOutline, 
-  UserContactOutline, 
-  EditSOutline, 
+import {
+  CheckOutline,
+  UserContactOutline,
+  EditSOutline,
   EyeOutline,
-  DeleteOutline
+  DeleteOutline,
+  PictureOutline
 } from 'antd-mobile-icons';
+import { Image, ImageViewer } from 'antd-mobile';
 import axios from 'axios';
 
 const CardDetailPage = () => {
@@ -223,6 +225,21 @@ const CardDetailPage = () => {
     });
   };
 
+  // 圖片路徑轉換為可訪問的URL
+  const getImageUrl = (imagePath) => {
+    if (!imagePath) return null;
+
+    // 處理 card_data/ 路徑
+    if (imagePath.startsWith('card_data/')) {
+      return `/static/${imagePath}`;
+    }
+    // 處理 output/card_images/ 路徑
+    if (imagePath.startsWith('output/card_images/')) {
+      return `/static/uploads/${imagePath.replace('output/card_images/', '')}`;
+    }
+    return imagePath;
+  };
+
   // 格式化日期
   const formatDate = (dateString) => {
     if (!dateString) return '';
@@ -268,10 +285,110 @@ const CardDetailPage = () => {
       </NavBar>
       
       <div className="content" style={{ padding: '16px' }}>
+        {/* 名片圖片顯示 */}
+        {(cardData.front_image_path || cardData.back_image_path) && (
+          <Card
+            title="名片圖片"
+            extra={<PictureOutline />}
+            style={{ marginBottom: '16px' }}
+          >
+            <div style={{ display: 'flex', gap: '12px', flexDirection: 'column', alignItems: 'center' }}>
+              {cardData.front_image_path && (
+                <div style={{ width: '100%', maxWidth: '320px' }}>
+                  <div style={{
+                    fontSize: '13px',
+                    fontWeight: 'bold',
+                    marginBottom: '8px',
+                    color: '#666'
+                  }}>
+                    正面
+                  </div>
+                  <Image
+                    src={getImageUrl(cardData.front_image_path)}
+                    fit="contain"
+                    style={{
+                      width: '100%',
+                      maxHeight: '200px',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      border: '1px solid #e8e8e8',
+                      boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+                    }}
+                    onClick={() => {
+                      ImageViewer.show({ image: getImageUrl(cardData.front_image_path) });
+                    }}
+                    fallback={
+                      <div style={{
+                        width: '100%',
+                        height: '200px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        backgroundColor: '#f5f5f5',
+                        borderRadius: '8px',
+                        color: '#999'
+                      }}>
+                        <div style={{ textAlign: 'center' }}>
+                          <PictureOutline fontSize={48} />
+                          <div style={{ marginTop: '8px' }}>圖片載入失敗</div>
+                        </div>
+                      </div>
+                    }
+                  />
+                </div>
+              )}
+              {cardData.back_image_path && (
+                <div style={{ width: '100%', maxWidth: '320px' }}>
+                  <div style={{
+                    fontSize: '13px',
+                    fontWeight: 'bold',
+                    marginBottom: '8px',
+                    color: '#666'
+                  }}>
+                    反面
+                  </div>
+                  <Image
+                    src={getImageUrl(cardData.back_image_path)}
+                    fit="contain"
+                    style={{
+                      width: '100%',
+                      maxHeight: '200px',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      border: '1px solid #e8e8e8',
+                      boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+                    }}
+                    onClick={() => {
+                      ImageViewer.show({ image: getImageUrl(cardData.back_image_path) });
+                    }}
+                    fallback={
+                      <div style={{
+                        width: '100%',
+                        height: '200px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        backgroundColor: '#f5f5f5',
+                        borderRadius: '8px',
+                        color: '#999'
+                      }}>
+                        <div style={{ textAlign: 'center' }}>
+                          <PictureOutline fontSize={48} />
+                          <div style={{ marginTop: '8px' }}>圖片載入失敗</div>
+                        </div>
+                      </div>
+                    }
+                  />
+                </div>
+              )}
+            </div>
+          </Card>
+        )}
+
         {/* 名片資料顯示/編輯表單 */}
-        <Card 
-          title={isEditing ? "編輯名片資料" : "名片資料"} 
-          extra={<UserContactOutline />} 
+        <Card
+          title={isEditing ? "編輯名片資料" : "名片資料"}
+          extra={<UserContactOutline />}
           style={{ marginBottom: '16px' }}
           key={`card-${cardData.id}-${cardData.updated_at}`}
         >

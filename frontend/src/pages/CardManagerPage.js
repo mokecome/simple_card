@@ -16,17 +16,19 @@ import {
   InfiniteScroll,
   DotLoading
 } from 'antd-mobile';
-import { 
-  DeleteOutline, 
-  EditSOutline, 
-  DownlandOutline, 
+import {
+  DeleteOutline,
+  EditSOutline,
+  DownlandOutline,
   AddOutline,
   UserContactOutline,
   PhoneFill,
   MailOutline,
   EnvironmentOutline,
-  UploadOutline
+  UploadOutline,
+  PictureOutline
 } from 'antd-mobile-icons';
+import { Image, ImageViewer } from 'antd-mobile';
 import axios from 'axios';
 
 const CardManagerPage = () => {
@@ -65,12 +67,27 @@ const CardManagerPage = () => {
     hasAddress: null
   });
 
+  // 圖片路徑轉換為可訪問的URL
+  const getImageUrl = (imagePath) => {
+    if (!imagePath) return null;
+
+    // 處理 card_data/ 路徑
+    if (imagePath.startsWith('card_data/')) {
+      return `/static/${imagePath}`;
+    }
+    // 處理 output/card_images/ 路徑
+    if (imagePath.startsWith('output/card_images/')) {
+      return `/static/uploads/${imagePath.replace('output/card_images/', '')}`;
+    }
+    return imagePath;
+  };
+
   // 關鍵詞高亮組件
   const HighlightText = ({ text, keyword }) => {
     if (!text || !keyword) return text || '';
-    
+
     const parts = text.toString().split(new RegExp(`(${keyword})`, 'gi'));
-    return parts.map((part, index) => 
+    return parts.map((part, index) =>
       part.toLowerCase() === keyword.toLowerCase() ? (
         <span key={index} style={{ backgroundColor: '#fffb8f', color: '#cf1322', fontWeight: 'bold' }}>
           {part}
@@ -531,20 +548,106 @@ const CardManagerPage = () => {
   const renderCardItem = (card) => {
     const cardStatus = checkCardStatus(card);
     const cardStyle = {
-      marginBottom: '12px', 
+      marginBottom: '12px',
       cursor: 'pointer',
       border: cardStatus.status === 'problem' ? '2px solid #ff7875' : '1px solid #d9d9d9',
       backgroundColor: cardStatus.status === 'problem' ? '#fff2f0' : '#ffffff'
     };
 
+    // 獲取圖片URL
+    const frontImageUrl = getImageUrl(card.front_image_path);
+    const backImageUrl = getImageUrl(card.back_image_path);
+    const hasImage = frontImageUrl || backImageUrl;
+
     return (
-    <Card 
-      key={card.id} 
+    <Card
+      key={card.id}
       style={cardStyle}
       bodyStyle={{ padding: '16px' }}
       onClick={() => navigate(`/cards/${card.id}`)}
     >
       <div className="card-content">
+        {/* 名片圖片預覽 */}
+        {hasImage && (
+          <div style={{
+            display: 'flex',
+            gap: '8px',
+            marginBottom: '12px',
+            padding: '8px',
+            backgroundColor: '#f5f5f5',
+            borderRadius: '6px',
+            maxWidth: '280px'
+          }}>
+            {frontImageUrl && (
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: '11px', color: '#999', marginBottom: '4px' }}>正面</div>
+                <Image
+                  src={frontImageUrl}
+                  fit="cover"
+                  style={{
+                    width: '100%',
+                    height: '70px',
+                    borderRadius: '4px',
+                    objectFit: 'cover',
+                    cursor: 'pointer'
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    ImageViewer.show({ image: frontImageUrl });
+                  }}
+                  fallback={
+                    <div style={{
+                      width: '100%',
+                      height: '80px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      backgroundColor: '#f0f0f0',
+                      borderRadius: '4px',
+                      color: '#999'
+                    }}>
+                      <PictureOutline fontSize={24} />
+                    </div>
+                  }
+                />
+              </div>
+            )}
+            {backImageUrl && (
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: '11px', color: '#999', marginBottom: '4px' }}>反面</div>
+                <Image
+                  src={backImageUrl}
+                  fit="cover"
+                  style={{
+                    width: '100%',
+                    height: '70px',
+                    borderRadius: '4px',
+                    objectFit: 'cover',
+                    cursor: 'pointer'
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    ImageViewer.show({ image: backImageUrl });
+                  }}
+                  fallback={
+                    <div style={{
+                      width: '100%',
+                      height: '80px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      backgroundColor: '#f0f0f0',
+                      borderRadius: '4px',
+                      color: '#999'
+                    }}>
+                      <PictureOutline fontSize={24} />
+                    </div>
+                  }
+                />
+              </div>
+            )}
+          </div>
+        )}
         {/* 狀態標記 */}
         {cardStatus.status === 'problem' && (
           <div style={{ 
