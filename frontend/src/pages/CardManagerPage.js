@@ -45,6 +45,11 @@ const CardManagerPage = () => {
   const [hasMore, setHasMore] = useState(true);
   const [currentPage, setCurrentPage] = useState(0);
   const pageSize = 20;
+
+  // 標籤篩選狀態
+  const [availableTags, setAvailableTags] = useState([]); // 所有可用標籤
+  const [selectedTags, setSelectedTags] = useState([]); // 已選擇的標籤
+  const [tagsLoading, setTagsLoading] = useState(false);
   
   // 全局統計數據 - 不受篩選影響
   const [globalStats, setGlobalStats] = useState({
@@ -159,7 +164,7 @@ const CardManagerPage = () => {
       console.log('正在載入全局統計數據...');
       const response = await axios.get('/api/v1/cards/stats');
       console.log('統計API響應:', response.data);
-      
+
       if (response.data && response.data.success && response.data.data) {
         console.log('設置統計數據:', response.data.data);
         setGlobalStats(response.data.data);
@@ -172,6 +177,25 @@ const CardManagerPage = () => {
     }
   };
 
+  // 載入所有可用標籤
+  const loadAvailableTags = async () => {
+    setTagsLoading(true);
+    try {
+      const response = await axios.get('/api/v1/cards/tags/list');
+      if (response.data && response.data.success && response.data.data) {
+        // 只取用戶標籤，按使用次數排序
+        const userTags = response.data.data
+          .filter(tag => tag.tag_type === 'user')
+          .sort((a, b) => b.count - a.count);
+        setAvailableTags(userTags);
+      }
+    } catch (error) {
+      console.error('載入標籤列表失敗:', error);
+    } finally {
+      setTagsLoading(false);
+    }
+  };
+
   // 載入名片列表 - 真正的分頁實現
   const loadCards = async (isLoadMore = false) => {
     if (!isLoadMore) {
@@ -180,7 +204,7 @@ const CardManagerPage = () => {
       setCards([]);
       setFilteredCards([]);
     }
-    
+
     try {
       const currentPageToLoad = isLoadMore ? currentPage + 1 : 0;
       const response = await axios.get('/api/v1/cards/', {
@@ -188,7 +212,8 @@ const CardManagerPage = () => {
           use_pagination: true,
           skip: currentPageToLoad * pageSize,
           limit: pageSize,
-          search: searchText || undefined
+          search: searchText || undefined,
+          tags: selectedTags.length > 0 ? selectedTags.join(',') : undefined // 標籤篩選
         }
       });
       
@@ -227,6 +252,7 @@ const CardManagerPage = () => {
   useEffect(() => {
     loadCards();
     loadGlobalStats(); // 載入全局統計數據
+    loadAvailableTags(); // 載入可用標籤
   }, []);
 
   // 高級篩選邏輯
@@ -297,15 +323,15 @@ const CardManagerPage = () => {
     });
   };
 
-  // 搜索功能 - 使用服務器端搜索
+  // 搜索功能和標籤篩選 - 使用服務器端搜索
   useEffect(() => {
-    // 當搜索條件改變時，重新載入第一頁
+    // 當搜索條件或標籤篩選改變時，重新載入第一頁
     const timeoutId = setTimeout(() => {
       loadCards(false);
     }, 300); // 防抖300ms
-    
+
     return () => clearTimeout(timeoutId);
-  }, [searchText]);
+  }, [searchText, selectedTags]);
 
   // 客戶端篩選（狀態篩選和高級篩選）
   useEffect(() => {
@@ -379,6 +405,22 @@ const CardManagerPage = () => {
         }
       },
     });
+  };
+
+  // 標籤選擇處理
+  const handleTagSelect = (tagName) => {
+    if (selectedTags.includes(tagName)) {
+      // 取消選擇
+      setSelectedTags(selectedTags.filter(t => t !== tagName));
+    } else {
+      // 添加選擇
+      setSelectedTags([...selectedTags, tagName]);
+    }
+  };
+
+  // 清空標籤篩選
+  const handleClearTags = () => {
+    setSelectedTags([]);
   };
 
   // 匯出名片
@@ -870,6 +912,54 @@ const CardManagerPage = () => {
           style={{ marginBottom: '16px' }}
         />
 
+        {/* 標籤篩選 */}
+        {availableTags.length > 0 && (
+          <Card style={{ marginBottom: '16px' }}>
+            <div style={{ marginBottom: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '14px', fontWeight: 'bold' }}>
+                標籤篩選 {selectedTags.length > 0 && `(已選 ${selectedTags.length})`}
+              </span>
+              {selectedTags.length > 0 && (
+                <Button
+                  size="mini"
+                  color="default"
+                  fill="none"
+                  onClick={handleClearTags}
+                  style={{ padding: '2px 8px', fontSize: '12px' }}
+                >
+                  清空
+                </Button>
+              )}
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+              {tagsLoading ? (
+                <span style={{ fontSize: '13px', color: '#999' }}>載入標籤中...</span>
+              ) : (
+                availableTags.slice(0, 15).map((tag) => (
+                  <Tag
+                    key={tag.tag_name}
+                    color={selectedTags.includes(tag.tag_name) ? 'primary' : 'default'}
+                    style={{
+                      cursor: 'pointer',
+                      fontSize: '13px',
+                      padding: '4px 10px',
+                      border: selectedTags.includes(tag.tag_name) ? '1px solid #1890ff' : '1px solid #d9d9d9'
+                    }}
+                    onClick={() => handleTagSelect(tag.tag_name)}
+                  >
+                    {tag.tag_name} ({tag.count})
+                  </Tag>
+                ))
+              )}
+            </div>
+            {availableTags.length > 15 && (
+              <div style={{ marginTop: '8px', fontSize: '12px', color: '#999', textAlign: 'center' }}>
+                顯示最常用的 15 個標籤，共 {availableTags.length} 個標籤
+              </div>
+            )}
+          </Card>
+        )}
+
         {/* 篩選按鈕 */}
         <Card style={{ marginBottom: '16px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
@@ -1201,11 +1291,11 @@ const CardManagerPage = () => {
             />
           ) : (
             <div>
-              {(searchText || Object.values(advancedFilters).some(v => v) || filterStatus !== 'all') && (
-                <div style={{ 
-                  marginBottom: '12px', 
-                  padding: '8px', 
-                  backgroundColor: '#e6f7ff', 
+              {(searchText || Object.values(advancedFilters).some(v => v) || filterStatus !== 'all' || selectedTags.length > 0) && (
+                <div style={{
+                  marginBottom: '12px',
+                  padding: '8px',
+                  backgroundColor: '#e6f7ff',
                   borderRadius: '4px',
                   fontSize: '13px',
                   color: '#0050b3',
@@ -1215,6 +1305,7 @@ const CardManagerPage = () => {
                     <span>🔍 顯示 {filteredCards.length} 張符合條件的名片</span>
                     <span style={{ fontSize: '12px' }}>
                       {searchText && `關鍵詞: "${searchText}"`}
+                      {selectedTags.length > 0 && ` | 標籤: ${selectedTags.join(', ')}`}
                       {Object.values(advancedFilters).some(v => v) && " | 高級篩選"}
                       {filterStatus !== 'all' && ` | 狀態: ${filterStatus === 'normal' ? '正常' : '有問題'}`}
                     </span>

@@ -30,6 +30,7 @@ nohup_*.log
 # 上传文件夹
 uploads/
 output/
+card_data/
 
 # IDE
 .vscode/

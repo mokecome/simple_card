@@ -1,0 +1,55 @@
+version: '3.8'
+
+services:
+  ocr-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ocr-management-system:latest
+    container_name: ocr-management
+    ports:
+      - "1002:1002"  # 前端端口
+      - "8006:8006"  # 後端 API 端口
+    environment:
+      - PORT=8006
+      - REACT_APP_PORT=1002
+      - DATABASE_URL=sqlite:////app/data/cards.db
+      - PYTHONUNBUFFERED=1
+      - TZ=Asia/Taipei
+    volumes:
+      # 數據持久化
+      - ./data:/app/data
+      - ./cards:/app/cards
+      - ./uploads:/app/uploads
+      - ./logs:/app/logs
+      # 開發時可掛載源代碼（可選）
+      # - ./backend:/app/backend:ro
+      # - ./frontend/src:/app/frontend/src:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8006/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - ocr-network
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+networks:
+  ocr-network:
+    driver: bridge
+
+# 使用外部卷來持久化數據（可選）
+# volumes:
+#   ocr-data:
+#     driver: local
+#   ocr-uploads:
+#     driver: local

@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, UploadFile, File, Form, Query, HTTPException
 from sqlalchemy.orm import Session
-from backend.models.card import Card, CardORM
+from backend.models.card import Card, CardORM, CardTagORM
 from backend.services.card_service import get_cards, get_card, create_card, update_card, delete_card, bulk_create_cards, get_cards_paginated, get_cards_count
 from backend.models.db import get_db
 from backend.core.exceptions import (
@@ -12,7 +12,7 @@ from backend.core.exceptions import (
 )
 from backend.core.response import ResponseHandler
 from backend.core.cache import cache
-from backend.schemas.card import CardCreate, CardUpdate, CardResponse
+from backend.schemas.card import CardCreate, CardUpdate, CardResponse, TagCreate, TagResponse, TagBatchCreate, TagListResponse
 from typing import List, Optional
 from fastapi.responses import StreamingResponse
 import csv
@@ -42,10 +42,86 @@ def list_cards(
     skip: int = Query(0, ge=0, description="跳過記錄數"),
     limit: int = Query(100, ge=1, le=1000, description="每頁記錄數"),
     search: Optional[str] = Query(None, description="搜索關鍵詞"),
+    tags: Optional[str] = Query(None, description="標籤過濾，多個標籤用逗號分隔"),
     use_pagination: bool = Query(False, description="是否使用分頁"),
     db: Session = Depends(get_db)
 ):
     try:
+        # 標籤過濾
+        if tags:
+            tag_list = [t.strip() for t in tags.split(',') if t.strip()]
+            if tag_list:
+                # 查詢包含指定標籤的名片ID
+                card_ids_query = db.query(CardTagORM.card_id).filter(
+                    CardTagORM.tag_name.in_(tag_list)
+                ).distinct()
+                card_ids = [row[0] for row in card_ids_query.all()]
+
+                if not card_ids:
+                    # 沒有匹配的名片
+                    return ResponseHandler.success(
+                        data=[] if not use_pagination else {"items": [], "total": 0, "skip": skip, "limit": limit, "has_more": False},
+                        message="未找到匹配標籤的名片"
+                    )
+
+                # 在查詢中添加card_id過濾
+                if use_pagination:
+                    from sqlalchemy import and_
+                    from backend.models.card import CardORM
+
+                    query = db.query(CardORM).filter(CardORM.id.in_(card_ids))
+
+                    if search:
+                        from sqlalchemy import or_
+                        search_filter = or_(
+                            CardORM.name_zh.contains(search),
+                            CardORM.name_en.contains(search),
+                            CardORM.company_name_zh.contains(search),
+                            CardORM.company_name_en.contains(search)
+                        )
+                        query = query.filter(search_filter)
+
+                    total = query.count()
+                    cards_orm = query.order_by(CardORM.created_at.desc()).offset(skip).limit(limit).all()
+
+                    cards = []
+                    for card in cards_orm:
+                        card_dict = card.__dict__.copy()
+                        card_dict.pop('_sa_instance_state', None)
+                        if card_dict.get('created_at'):
+                            card_dict['created_at'] = card_dict['created_at'].isoformat()
+                        if card_dict.get('updated_at'):
+                            card_dict['updated_at'] = card_dict['updated_at'].isoformat()
+                        cards.append(card_dict)
+
+                    return ResponseHandler.success(
+                        data={
+                            "items": cards,
+                            "total": total,
+                            "skip": skip,
+                            "limit": limit,
+                            "has_more": (skip + len(cards)) < total
+                        },
+                        message="獲取名片列表成功"
+                    )
+                else:
+                    from backend.models.card import CardORM
+                    cards_orm = db.query(CardORM).filter(CardORM.id.in_(card_ids)).order_by(CardORM.created_at.desc()).all()
+                    cards = []
+                    for card in cards_orm:
+                        card_dict = card.__dict__.copy()
+                        card_dict.pop('_sa_instance_state', None)
+                        if card_dict.get('created_at'):
+                            card_dict['created_at'] = card_dict['created_at'].isoformat()
+                        if card_dict.get('updated_at'):
+                            card_dict['updated_at'] = card_dict['updated_at'].isoformat()
+                        cards.append(card_dict)
+                    return ResponseHandler.success(
+                        data=cards,
+                        message="獲取名片列表成功"
+                    )
+
+        # 正常查詢（無標籤過濾）
         if use_pagination:
             # 使用分頁查詢
             cards, total = get_cards_paginated(db, skip=skip, limit=limit, search=search)
@@ -1071,4 +1147,172 @@ async def text_import_cards(file: UploadFile = File(...), db: Session = Depends(
         return ResponseHandler.error(
             message=f"文本導入失敗: {str(e)}",
             status_code=500
+        )
+
+
+# ==================== Tag Management Endpoints ====================
+
+@router.post("/{card_id}/tags")
+def add_tags_to_card(
+    card_id: int,
+    tag_request: TagBatchCreate,
+    db: Session = Depends(get_db)
+):
+    """為名片添加標籤（批量）"""
+    try:
+        # 檢查名片是否存在
+        card = get_card(db, card_id)
+        if not card:
+            return ResponseHandler.error(
+                message=f"找不到ID為 {card_id} 的名片",
+                status_code=404
+            )
+
+        # 獲取現有標籤
+        existing_tags = db.query(CardTagORM).filter(CardTagORM.card_id == card_id).all()
+        existing_tag_names = {tag.tag_name for tag in existing_tags}
+
+        # 創建新標籤
+        new_tags = []
+        for tag_name in tag_request.tags:
+            # 避免重複
+            if tag_name not in existing_tag_names:
+                tag_orm = CardTagORM(
+                    card_id=card_id,
+                    tag_name=tag_name.strip(),
+                    tag_type=tag_request.tag_type
+                )
+                db.add(tag_orm)
+                new_tags.append(tag_name)
+
+        db.commit()
+
+        # 清除緩存
+        cache_key = f"card_{card_id}"
+        cache.delete(cache_key)
+
+        return ResponseHandler.success(
+            data={
+                "card_id": card_id,
+                "added_tags": new_tags,
+                "total_tags": len(existing_tag_names) + len(new_tags)
+            },
+            message=f"成功添加 {len(new_tags)} 個標籤"
+        )
+
+    except Exception as e:
+        logger.error(f"添加標籤失敗: {str(e)}")
+        db.rollback()
+        return ResponseHandler.error(
+            message="添加標籤失敗",
+            error=e,
+            status_code=400
+        )
+
+
+@router.get("/{card_id}/tags", response_model=List[TagResponse])
+def get_card_tags(card_id: int, db: Session = Depends(get_db)):
+    """獲取名片的所有標籤"""
+    try:
+        # 檢查名片是否存在
+        card = get_card(db, card_id)
+        if not card:
+            return ResponseHandler.error(
+                message=f"找不到ID為 {card_id} 的名片",
+                status_code=404
+            )
+
+        # 獲取標籤
+        tags = db.query(CardTagORM).filter(CardTagORM.card_id == card_id).all()
+
+        return ResponseHandler.success(
+            data=[{
+                "id": tag.id,
+                "card_id": tag.card_id,
+                "tag_name": tag.tag_name,
+                "tag_type": tag.tag_type,
+                "created_at": tag.created_at.isoformat() if tag.created_at else None
+            } for tag in tags],
+            message="獲取標籤列表成功"
+        )
+
+    except Exception as e:
+        logger.error(f"獲取標籤失敗: {str(e)}")
+        return ResponseHandler.error(
+            message="獲取標籤失敗",
+            error=e
+        )
+
+
+@router.delete("/{card_id}/tags/{tag_id}")
+def remove_tag_from_card(card_id: int, tag_id: int, db: Session = Depends(get_db)):
+    """從名片移除指定標籤"""
+    try:
+        # 檢查標籤是否存在
+        tag = db.query(CardTagORM).filter(
+            CardTagORM.id == tag_id,
+            CardTagORM.card_id == card_id
+        ).first()
+
+        if not tag:
+            return ResponseHandler.error(
+                message=f"找不到標籤 ID {tag_id}",
+                status_code=404
+            )
+
+        db.delete(tag)
+        db.commit()
+
+        # 清除緩存
+        cache_key = f"card_{card_id}"
+        cache.delete(cache_key)
+
+        return ResponseHandler.success(
+            message="標籤刪除成功"
+        )
+
+    except Exception as e:
+        logger.error(f"刪除標籤失敗: {str(e)}")
+        db.rollback()
+        return ResponseHandler.error(
+            message="刪除標籤失敗",
+            error=e,
+            status_code=400
+        )
+
+
+@router.get("/tags/list")
+def get_all_tags(db: Session = Depends(get_db)):
+    """獲取所有標籤列表（帶使用次數統計）"""
+    try:
+        from sqlalchemy import func
+
+        # 查詢所有標籤及其使用次數
+        tags = db.query(
+            CardTagORM.tag_name,
+            CardTagORM.tag_type,
+            func.count(CardTagORM.id).label('count')
+        ).group_by(
+            CardTagORM.tag_name,
+            CardTagORM.tag_type
+        ).order_by(
+            func.count(CardTagORM.id).desc()
+        ).all()
+
+        result = [{
+            "tag_name": tag.tag_name,
+            "tag_type": tag.tag_type,
+            "count": tag.count
+        } for tag in tags]
+
+        return ResponseHandler.success(
+            data=result,
+            message="獲取標籤列表成功"
+        )
+
+    except Exception as e:
+        logger.error(f"獲取標籤列表失敗: {str(e)}")
+        return ResponseHandler.error(
+            message="獲取標籤列表失敗",
+            error=e
         ) 

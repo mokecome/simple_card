@@ -10,7 +10,7 @@ import os
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from backend.models.db import engine, Base
-from backend.models.card import CardORM
+from backend.models.card import CardORM, CardTagORM
 from backend.core.config import settings
 
 def init_database():
@@ -24,9 +24,12 @@ def init_database():
         print("✅ 數據庫初始化成功！")
         print("📋 已創建的表:")
         print(f"   - cards (名片數據表)")
+        print(f"   - card_tags (名片標籤表)")
         print(f"📊 索引:")
         print(f"   - idx_name_company (姓名+公司複合索引)")
         print(f"   - idx_name_phone (姓名+手機複合索引)")
+        print(f"   - idx_card_tag (名片+標籤複合索引)")
+        print(f"   - idx_tag_type (標籤名稱+類型索引)")
         
         return True
         

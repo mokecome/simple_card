@@ -1,0 +1,84 @@
+# Node modules
+node_modules/
+frontend/node_modules/
+*/node_modules/
+
+# Python
+__pycache__/
+*/__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Build output
+frontend/build/
+frontend/dist/
+*.egg-info/
+dist/
+build/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+nohup_*.log
+backend/nohup_backend.log
+frontend/nohup_frontend.log
+logs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Git
+.git/
+.gitignore
+.github/
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+tmp/
+temp/
+
+# Test files
+coverage/
+.coverage
+.pytest_cache/
+*.cover
+htmlcov/
+
+# Documentation
+*.md
+!CLAUDE.md
+docs/
+
+# Database backups
+*.db-journal
+*.db-wal
+*.backup
+.backup_configs/
+
+# Uploaded files (will be mounted as volume)
+uploads/
+cards/
+
+# Other
+.dockerignore
+Dockerfile
+docker-compose.yml
+*.sql

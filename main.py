@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 import os
 import logging
@@ -57,15 +58,24 @@ app.add_middleware(
 
 # 註冊路由
 app.include_router(
-    card.router, 
-    prefix=f"{API_V1_PREFIX}/cards", 
+    card.router,
+    prefix=f"{API_V1_PREFIX}/cards",
     tags=["Business Card Management"]
 )
 app.include_router(
-    ocr.router, 
-    prefix=f"{API_V1_PREFIX}/ocr", 
+    ocr.router,
+    prefix=f"{API_V1_PREFIX}/ocr",
     tags=["OCR"]
 )
+
+# 掛載靜態文件目錄
+# 掛載 card_data 目錄（舊圖片）
+if os.path.exists("card_data"):
+    app.mount("/static/card_data", StaticFiles(directory="card_data"), name="card_data")
+
+# 掛載 output/card_images 目錄（新上傳圖片）
+if os.path.exists("output/card_images"):
+    app.mount("/static/uploads", StaticFiles(directory="output/card_images"), name="uploads")
 
 # 健康檢查端點
 @app.get("/health")

@@ -1,6 +1,7 @@
 from pydantic import BaseModel
-from typing import Optional
-from sqlalchemy import Column, Integer, String, DateTime, Text, Index
+from typing import Optional, List
+from sqlalchemy import Column, Integer, String, DateTime, Text, Index, ForeignKey
+from sqlalchemy.orm import relationship
 from backend.models.db import Base
 import datetime
 
@@ -59,6 +60,29 @@ class CardORM(Base):
         Index('idx_name_phone', 'name_zh', 'mobile_phone'),       # 姓名+手機複合索引
     )
 
+    # Relationship to tags
+    tags = relationship("CardTagORM", back_populates="card", cascade="all, delete-orphan")
+
+
+class CardTagORM(Base):
+    """名片標籤表"""
+    __tablename__ = "card_tags"
+
+    id = Column(Integer, primary_key=True, index=True)
+    card_id = Column(Integer, ForeignKey('cards.id', ondelete='CASCADE'), nullable=False, index=True)
+    tag_name = Column(String(50), nullable=False, index=True)
+    tag_type = Column(String(20), nullable=False, default='user')  # 'user' or 'system'
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, index=True)
+
+    # Relationship to card
+    card = relationship("CardORM", back_populates="tags")
+
+    # 複合索引優化查詢
+    __table_args__ = (
+        Index('idx_card_tag', 'card_id', 'tag_name'),  # 名片+標籤複合索引
+        Index('idx_tag_type', 'tag_name', 'tag_type'), # 標籤名稱+類型索引
+    )
+
 class Card(BaseModel):
     id: Optional[int] = None
     
@@ -106,5 +130,19 @@ class Card(BaseModel):
     back_ocr_text: Optional[str] = None           # 反面OCR原始文字
     created_at: Optional[datetime.datetime] = None
     updated_at: Optional[datetime.datetime] = None
+
+    # 標籤
+    tags: Optional[List['CardTag']] = None
+
+    model_config = {"from_attributes": True}
+
+
+class CardTag(BaseModel):
+    """名片標籤 Pydantic 模型"""
+    id: Optional[int] = None
+    card_id: int
+    tag_name: str
+    tag_type: str = 'user'  # 'user' or 'system'
+    created_at: Optional[datetime.datetime] = None
 
     model_config = {"from_attributes": True} 

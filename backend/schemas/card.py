@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, EmailStr, field_validator
-from typing import Optional
+from typing import Optional, List
 from datetime import datetime
 import re
 
@@ -120,6 +120,62 @@ class CardResponse(CardBase):
     back_image_url: Optional[str] = None
     created_at: datetime
     updated_at: datetime
-    
+    tags: Optional[List['TagResponse']] = []
+
+    class Config:
+        from_attributes = True
+
+
+# Tag Schemas
+class TagBase(BaseModel):
+    """標籤基礎模型"""
+    tag_name: str = Field(..., min_length=1, max_length=50, description="標籤名稱")
+    tag_type: str = Field(default='user', description="標籤類型: user(用戶標籤) or system(系統標籤)")
+
+    @field_validator('tag_type')
+    @classmethod
+    def validate_tag_type(cls, v):
+        if v not in ['user', 'system']:
+            raise ValueError('標籤類型必須是 user 或 system')
+        return v
+
+
+class TagCreate(TagBase):
+    """創建標籤的請求模型"""
+    pass
+
+
+class TagResponse(TagBase):
+    """標籤響應模型"""
+    id: int
+    card_id: int
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class TagBatchCreate(BaseModel):
+    """批量創建標籤的請求模型"""
+    tags: List[str] = Field(..., min_length=1, max_length=10, description="標籤名稱列表(最多10個)")
+    tag_type: str = Field(default='user', description="標籤類型")
+
+    @field_validator('tags')
+    @classmethod
+    def validate_tags(cls, v):
+        if len(v) > 10:
+            raise ValueError('一次最多添加10個標籤')
+        for tag in v:
+            if not tag or len(tag) > 50:
+                raise ValueError('標籤名稱必須在1-50個字符之間')
+        return v
+
+
+class TagListResponse(BaseModel):
+    """標籤列表響應模型"""
+    tag_name: str
+    tag_type: str
+    count: int  # 使用該標籤的名片數量
+
     class Config:
         from_attributes = True
