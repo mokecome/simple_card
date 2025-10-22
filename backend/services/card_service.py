@@ -20,20 +20,27 @@ def get_cards(db: Session) -> List[dict]:
             card_dict['created_at'] = card_dict['created_at'].isoformat()
         if card_dict.get('updated_at'):
             card_dict['updated_at'] = card_dict['updated_at'].isoformat()
-        
+        if card_dict.get('classified_at'):
+            card_dict['classified_at'] = card_dict['classified_at'].isoformat()
+
         result.append(card_dict)
     return result
 
 def get_cards_paginated(
-    db: Session, 
-    skip: int = 0, 
+    db: Session,
+    skip: int = 0,
     limit: int = 100,
     search: Optional[str] = None,
+    industry: Optional[str] = None,
     filter_status: Optional[str] = None
 ) -> Tuple[List[dict], int]:
     """分頁獲取名片，支持搜索和過濾"""
     query = db.query(CardORM)
-    
+
+    # 产业分类过滤
+    if industry and industry != '全部':
+        query = query.filter(CardORM.industry_category == industry)
+
     # 搜索過濾 - 支援姓名、公司、職稱的中英文搜索
     if search:
         search_filter = or_(
@@ -65,27 +72,31 @@ def get_cards_paginated(
     for card in cards:
         card_dict = card.__dict__.copy()
         card_dict.pop('_sa_instance_state', None)
-        
+
         if card_dict.get('created_at'):
             card_dict['created_at'] = card_dict['created_at'].isoformat()
         if card_dict.get('updated_at'):
             card_dict['updated_at'] = card_dict['updated_at'].isoformat()
-        
+        if card_dict.get('classified_at'):
+            card_dict['classified_at'] = card_dict['classified_at'].isoformat()
+
         result.append(card_dict)
-    
+
     return result, total
 
 def get_card(db: Session, card_id: int) -> dict:
     card = db.query(CardORM).filter(CardORM.id == card_id).first()
     if not card:
         return None
-    
+
     card_dict = Card.model_validate(card).model_dump()
     if card_dict.get('created_at'):
         card_dict['created_at'] = card_dict['created_at'].isoformat()
     if card_dict.get('updated_at'):
         card_dict['updated_at'] = card_dict['updated_at'].isoformat()
-    
+    if card_dict.get('classified_at'):
+        card_dict['classified_at'] = card_dict['classified_at'].isoformat()
+
     return card_dict
 
 def create_card(db: Session, card: Card) -> dict:

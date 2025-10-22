@@ -1,17 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { 
-  Card, 
-  Button, 
-  Space, 
-  Toast, 
+import {
+  Card,
+  Button,
+  Space,
+  Toast,
   NavBar,
   Form,
   Input,
   TextArea,
   Divider,
   Loading,
-  Dialog
+  Dialog,
+  Tag
 } from 'antd-mobile';
 import {
   CheckOutline,
@@ -30,6 +31,7 @@ const CardDetailPage = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [classifying, setClassifying] = useState(false);
   
   // 統一的名片資料狀態 - 與資料庫欄位名稱保持一致
   const [cardData, setCardData] = useState({
@@ -68,7 +70,13 @@ const CardDetailPage = () => {
     // 備註資訊
     note1: '',                   // 備註1
     note2: '',                   // 備註2
-    
+
+    // 产业分类信息
+    industry_category: '',       // 产业分类
+    classification_confidence: null, // 分类置信度
+    classification_reason: '',   // 分类原因
+    classified_at: '',           // 分类时间
+
     created_at: '',              // 創建時間
     updated_at: ''               // 更新時間
   });
@@ -223,6 +231,41 @@ const CardDetailPage = () => {
         }
       }
     });
+  };
+
+  // 重新分类名片
+  const handleReclassify = async () => {
+    setClassifying(true);
+    try {
+      const response = await axios.post(`/api/v1/cards/${id}/classify`);
+
+      if (response.data && response.data.success) {
+        const { industry_category, classification_confidence, classified_at } = response.data.data;
+
+        // 更新cardData状态
+        setCardData(prevData => ({
+          ...prevData,
+          industry_category,
+          classification_confidence,
+          classified_at
+        }));
+
+        Toast.show({
+          content: `已分类为: ${industry_category}`,
+          position: 'center',
+          duration: 2000
+        });
+      }
+    } catch (error) {
+      console.error('分类失败:', error);
+      Toast.show({
+        content: error.response?.data?.message || '分类失败，请重试',
+        position: 'center',
+        duration: 2000
+      });
+    } finally {
+      setClassifying(false);
+    }
   };
 
   // 圖片路徑轉換為可訪問的URL
@@ -791,6 +834,67 @@ const CardDetailPage = () => {
                 </Form.Item>
               </div>
             </div>
+
+            {/* 产业分类信息 */}
+            {!isEditing && (
+              <div className="form-section">
+                <Divider>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                    <span>产业分类</span>
+                    <Button
+                      color="primary"
+                      size="small"
+                      onClick={handleReclassify}
+                      loading={classifying}
+                      style={{ marginLeft: '12px' }}
+                    >
+                      🤖 重新分类
+                    </Button>
+                  </div>
+                </Divider>
+
+                {cardData.industry_category ? (
+                  <>
+                    <Form.Item label="產業類別">
+                      <div style={{ padding: '8px 0', fontSize: '16px' }}>
+                        <Tag
+                          color={
+                            cardData.industry_category === '防詐' ? 'warning' :
+                            cardData.industry_category === '旅宿' ? 'success' :
+                            cardData.industry_category === '工業應用' ? 'primary' :
+                            cardData.industry_category === '食品業' ? 'default' :
+                            'default'
+                          }
+                          style={{ fontSize: '14px' }}
+                        >
+                          🏢 {cardData.industry_category}
+                        </Tag>
+                      </div>
+                    </Form.Item>
+
+                    {cardData.classification_confidence && (
+                      <Form.Item label="置信度">
+                        <div style={{ padding: '8px 0', fontSize: '14px', color: '#666' }}>
+                          {Number(cardData.classification_confidence).toFixed(1)}%
+                        </div>
+                      </Form.Item>
+                    )}
+
+                    {cardData.classified_at && (
+                      <Form.Item label="分类时间">
+                        <div style={{ padding: '8px 0', fontSize: '14px', color: '#999' }}>
+                          {formatDate(cardData.classified_at)}
+                        </div>
+                      </Form.Item>
+                    )}
+                  </>
+                ) : (
+                  <div style={{ padding: '16px', textAlign: 'center', color: '#999' }}>
+                    暂无产业分类信息，点击「重新分类」按钮进行AI自动分类
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* 時間資訊 */}
             {!isEditing && (

@@ -4,6 +4,10 @@
 """
 import os
 from typing import List
+from dotenv import load_dotenv
+
+# 加載 .env 文件
+load_dotenv()
 
 def get_env_bool(key: str, default: bool = False) -> bool:
     """獲取布林類型環境變數"""

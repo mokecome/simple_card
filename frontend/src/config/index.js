@@ -69,9 +69,18 @@ export const validateConfig = () => {
   if (!API_BASE_URL) {
     errors.push('REACT_APP_API_BASE_URL 未設置');
   } else {
-    try {
-      new URL(API_BASE_URL);
-    } catch (e) {
+    // 允許相對路徑（用於 proxy 模式）或完整 URL
+    const isRelativePath = API_BASE_URL.startsWith('/');
+    const isValidUrl = isRelativePath || (() => {
+      try {
+        new URL(API_BASE_URL);
+        return true;
+      } catch (e) {
+        return false;
+      }
+    })();
+
+    if (!isValidUrl) {
       errors.push('REACT_APP_API_BASE_URL 格式不正確');
     }
   }

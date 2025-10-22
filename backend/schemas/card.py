@@ -41,7 +41,12 @@ class CardBase(BaseModel):
     # 備註
     note1: Optional[str] = Field(None, max_length=500, description="備註1")
     note2: Optional[str] = Field(None, max_length=500, description="備註2")
-    
+
+    # AI 产业分类字段
+    industry_category: Optional[str] = Field(None, max_length=50, description="产业分类")
+    classification_confidence: Optional[float] = Field(None, ge=0, le=100, description="分类信心度")
+    classification_reason: Optional[str] = Field(None, max_length=500, description="分类理由")
+
     @field_validator('mobile_phone', 'company_phone1', 'company_phone2')
     @classmethod
     def validate_phone(cls, v):
@@ -120,62 +125,31 @@ class CardResponse(CardBase):
     back_image_url: Optional[str] = None
     created_at: datetime
     updated_at: datetime
-    tags: Optional[List['TagResponse']] = []
+    classified_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
 
 
-# Tag Schemas
-class TagBase(BaseModel):
-    """標籤基礎模型"""
-    tag_name: str = Field(..., min_length=1, max_length=50, description="標籤名稱")
-    tag_type: str = Field(default='user', description="標籤類型: user(用戶標籤) or system(系統標籤)")
-
-    @field_validator('tag_type')
-    @classmethod
-    def validate_tag_type(cls, v):
-        if v not in ['user', 'system']:
-            raise ValueError('標籤類型必須是 user 或 system')
-        return v
+# AI Industry Classification Schemas
+class ClassificationRequest(BaseModel):
+    """批量分类请求"""
+    card_ids: Optional[List[int]] = Field(None, description="名片ID列表，为空则分类所有未分类的名片")
 
 
-class TagCreate(TagBase):
-    """創建標籤的請求模型"""
-    pass
-
-
-class TagResponse(TagBase):
-    """標籤響應模型"""
-    id: int
+class ClassificationResult(BaseModel):
+    """单个分类结果"""
     card_id: int
-    created_at: datetime
-
-    class Config:
-        from_attributes = True
-
-
-class TagBatchCreate(BaseModel):
-    """批量創建標籤的請求模型"""
-    tags: List[str] = Field(..., min_length=1, max_length=10, description="標籤名稱列表(最多10個)")
-    tag_type: str = Field(default='user', description="標籤類型")
-
-    @field_validator('tags')
-    @classmethod
-    def validate_tags(cls, v):
-        if len(v) > 10:
-            raise ValueError('一次最多添加10個標籤')
-        for tag in v:
-            if not tag or len(tag) > 50:
-                raise ValueError('標籤名稱必須在1-50個字符之間')
-        return v
+    industry_category: str
+    confidence: float
+    reason: str
+    success: bool
+    error: Optional[str] = None
 
 
-class TagListResponse(BaseModel):
-    """標籤列表響應模型"""
-    tag_name: str
-    tag_type: str
-    count: int  # 使用該標籤的名片數量
-
-    class Config:
-        from_attributes = True
+class ClassificationBatchResponse(BaseModel):
+    """批量分类响应"""
+    total: int                          # 总数
+    success_count: int                  # 成功数
+    failed_count: int                   # 失败数
+    results: List[ClassificationResult] # 详细结果

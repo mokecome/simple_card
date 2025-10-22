@@ -1,19 +1,24 @@
 from fastapi import APIRouter, Depends, UploadFile, File, Form, Query, HTTPException
 from sqlalchemy.orm import Session
-from backend.models.card import Card, CardORM, CardTagORM
+from backend.models.card import Card, CardORM
 from backend.services.card_service import get_cards, get_card, create_card, update_card, delete_card, bulk_create_cards, get_cards_paginated, get_cards_count
+from backend.services.industry_classification_service import IndustryClassificationService
+from backend.services.ocr_service import OCRService
+from backend.services.task_manager import task_manager
 from backend.models.db import get_db
 from backend.core.exceptions import (
-    card_not_found_error, 
-    card_create_failed_error, 
+    card_not_found_error,
+    card_create_failed_error,
     card_update_failed_error,
     card_delete_failed_error,
     file_upload_failed_error
 )
 from backend.core.response import ResponseHandler
 from backend.core.cache import cache
-from backend.schemas.card import CardCreate, CardUpdate, CardResponse, TagCreate, TagResponse, TagBatchCreate, TagListResponse
+from backend.schemas.card import CardCreate, CardUpdate, CardResponse, ClassificationRequest, ClassificationResult, ClassificationBatchResponse
+from backend.schemas.task import BatchClassifyRequest, BatchClassifyResponse, TaskStatusResponse, TaskCancelResponse
 from typing import List, Optional
+import threading
 from fastapi.responses import StreamingResponse
 import csv
 import io
@@ -42,89 +47,14 @@ def list_cards(
     skip: int = Query(0, ge=0, description="跳過記錄數"),
     limit: int = Query(100, ge=1, le=1000, description="每頁記錄數"),
     search: Optional[str] = Query(None, description="搜索關鍵詞"),
-    tags: Optional[str] = Query(None, description="標籤過濾，多個標籤用逗號分隔"),
+    industry: Optional[str] = Query(None, description="产业分类过滤"),
     use_pagination: bool = Query(False, description="是否使用分頁"),
     db: Session = Depends(get_db)
 ):
     try:
-        # 標籤過濾
-        if tags:
-            tag_list = [t.strip() for t in tags.split(',') if t.strip()]
-            if tag_list:
-                # 查詢包含指定標籤的名片ID
-                card_ids_query = db.query(CardTagORM.card_id).filter(
-                    CardTagORM.tag_name.in_(tag_list)
-                ).distinct()
-                card_ids = [row[0] for row in card_ids_query.all()]
-
-                if not card_ids:
-                    # 沒有匹配的名片
-                    return ResponseHandler.success(
-                        data=[] if not use_pagination else {"items": [], "total": 0, "skip": skip, "limit": limit, "has_more": False},
-                        message="未找到匹配標籤的名片"
-                    )
-
-                # 在查詢中添加card_id過濾
-                if use_pagination:
-                    from sqlalchemy import and_
-                    from backend.models.card import CardORM
-
-                    query = db.query(CardORM).filter(CardORM.id.in_(card_ids))
-
-                    if search:
-                        from sqlalchemy import or_
-                        search_filter = or_(
-                            CardORM.name_zh.contains(search),
-                            CardORM.name_en.contains(search),
-                            CardORM.company_name_zh.contains(search),
-                            CardORM.company_name_en.contains(search)
-                        )
-                        query = query.filter(search_filter)
-
-                    total = query.count()
-                    cards_orm = query.order_by(CardORM.created_at.desc()).offset(skip).limit(limit).all()
-
-                    cards = []
-                    for card in cards_orm:
-                        card_dict = card.__dict__.copy()
-                        card_dict.pop('_sa_instance_state', None)
-                        if card_dict.get('created_at'):
-                            card_dict['created_at'] = card_dict['created_at'].isoformat()
-                        if card_dict.get('updated_at'):
-                            card_dict['updated_at'] = card_dict['updated_at'].isoformat()
-                        cards.append(card_dict)
-
-                    return ResponseHandler.success(
-                        data={
-                            "items": cards,
-                            "total": total,
-                            "skip": skip,
-                            "limit": limit,
-                            "has_more": (skip + len(cards)) < total
-                        },
-                        message="獲取名片列表成功"
-                    )
-                else:
-                    from backend.models.card import CardORM
-                    cards_orm = db.query(CardORM).filter(CardORM.id.in_(card_ids)).order_by(CardORM.created_at.desc()).all()
-                    cards = []
-                    for card in cards_orm:
-                        card_dict = card.__dict__.copy()
-                        card_dict.pop('_sa_instance_state', None)
-                        if card_dict.get('created_at'):
-                            card_dict['created_at'] = card_dict['created_at'].isoformat()
-                        if card_dict.get('updated_at'):
-                            card_dict['updated_at'] = card_dict['updated_at'].isoformat()
-                        cards.append(card_dict)
-                    return ResponseHandler.success(
-                        data=cards,
-                        message="獲取名片列表成功"
-                    )
-
-        # 正常查詢（無標籤過濾）
         if use_pagination:
-            # 使用分頁查詢
-            cards, total = get_cards_paginated(db, skip=skip, limit=limit, search=search)
+            # 使用分頁查詢（支持产业过滤）
+            cards, total = get_cards_paginated(db, skip=skip, limit=limit, search=search, industry=industry)
             return ResponseHandler.success(
                 data={
                     "items": cards,
@@ -210,20 +140,29 @@ def get_cards_stats(db: Session = Depends(get_db)):
         total_count = len(all_cards)
         normal_count = 0
         problem_count = 0
-        
+
+        # 產業分類統計
+        industry_stats = {}
+
         for card in all_cards:
             card_status = check_card_status_backend(card)
             if card_status['status'] == 'normal':
                 normal_count += 1
             else:
                 problem_count += 1
-        
+
+            # 統計產業分類
+            industry = card.get('industry_category', '').strip() if card.get('industry_category') else ''
+            if industry:
+                industry_stats[industry] = industry_stats.get(industry, 0) + 1
+
         stats_data = {
             'total': total_count,
             'normal': normal_count,
-            'problem': problem_count
+            'problem': problem_count,
+            'industry_stats': industry_stats
         }
-        
+
         return ResponseHandler.success(
             data=stats_data,
             message="獲取統計數據成功"
@@ -745,7 +684,6 @@ async def batch_import_cards(db: Session = Depends(get_db)):
     使用集成到OCRService的批量導入功能 - 整合智能批量處理
     """
     try:
-        from backend.services.ocr_service_temp import OCRService
         from backend.services.card_enhancement_service import BatchProcessingService
         
         # 初始化服務
@@ -1150,169 +1088,196 @@ async def text_import_cards(file: UploadFile = File(...), db: Session = Depends(
         )
 
 
-# ==================== Tag Management Endpoints ====================
+# ==================== AI Industry Classification Endpoints ====================
 
-@router.post("/{card_id}/tags")
-def add_tags_to_card(
-    card_id: int,
-    tag_request: TagBatchCreate,
+@router.post("/classify-batch")
+def classify_cards_batch_async(
+    request: BatchClassifyRequest,
     db: Session = Depends(get_db)
 ):
-    """為名片添加標籤（批量）"""
+    """异步批量 AI 分类名片（后台任务）"""
     try:
-        # 檢查名片是否存在
-        card = get_card(db, card_id)
-        if not card:
-            return ResponseHandler.error(
-                message=f"找不到ID為 {card_id} 的名片",
-                status_code=404
+        # 获取待分类名片
+        if request.card_ids:
+            cards = db.query(CardORM).filter(CardORM.id.in_(request.card_ids)).all()
+        else:
+            # 默认分类所有未分类的名片
+            cards = db.query(CardORM).filter(CardORM.industry_category.is_(None)).all()
+
+        if not cards:
+            return ResponseHandler.success(
+                data={
+                    "task_id": None,
+                    "status": "completed",
+                    "total": 0,
+                    "completed": 0,
+                    "failed": 0,
+                    "success_count": 0
+                },
+                message="没有需要分类的名片"
             )
 
-        # 獲取現有標籤
-        existing_tags = db.query(CardTagORM).filter(CardTagORM.card_id == card_id).all()
-        existing_tag_names = {tag.tag_name for tag in existing_tags}
+        # 创建任务
+        total_count = len(cards)
+        task_id = task_manager.create_task(total=total_count)
 
-        # 創建新標籤
-        new_tags = []
-        for tag_name in tag_request.tags:
-            # 避免重複
-            if tag_name not in existing_tag_names:
-                tag_orm = CardTagORM(
-                    card_id=card_id,
-                    tag_name=tag_name.strip(),
-                    tag_type=tag_request.tag_type
-                )
-                db.add(tag_orm)
-                new_tags.append(tag_name)
+        logger.info(f"创建批量分类任务: task_id={task_id}, total={total_count}")
+
+        # 后台线程处理
+        def background_classify():
+            try:
+                # 标记任务开始
+                task_manager.start_task(task_id)
+
+                # 获取数据库会话（独立会话）
+                from backend.models.db import SessionLocal
+                bg_db = SessionLocal()
+
+                try:
+                    # 转换为字典列表
+                    card_dicts = [{
+                        'id': card.id,
+                        'company_name_zh': card.company_name_zh,
+                        'company_name_en': card.company_name_en,
+                        'position_zh': card.position_zh,
+                        'position_en': card.position_en
+                    } for card in cards]
+
+                    # 异步批量分类
+                    classifier = IndustryClassificationService()
+                    results = classifier.classify_batch_async(card_dicts, task_id)
+
+                    # 更新数据库
+                    for result in results:
+                        if result and result['success']:
+                            card = bg_db.query(CardORM).filter(CardORM.id == result['card_id']).first()
+                            if card:
+                                card.industry_category = result['industry_category']
+                                card.classification_confidence = result['confidence']
+                                card.classification_reason = result['reason']
+                                card.classified_at = datetime.utcnow()
+
+                    bg_db.commit()
+
+                    # 标记任务完成
+                    task_manager.complete_task(task_id)
+                    logger.info(f"任务完成: task_id={task_id}")
+
+                except Exception as e:
+                    logger.error(f"后台任务失败: task_id={task_id}, error={str(e)}")
+                    bg_db.rollback()
+                    task_manager.complete_task(task_id, error_message=str(e))
+
+                finally:
+                    bg_db.close()
+
+            except Exception as e:
+                logger.error(f"后台线程异常: task_id={task_id}, error={str(e)}")
+                task_manager.complete_task(task_id, error_message=str(e))
+
+        # 启动后台线程
+        thread = threading.Thread(target=background_classify, daemon=True)
+        thread.start()
+
+        # 立即返回任务信息
+        task_status = task_manager.get_status(task_id)
+
+        return ResponseHandler.success(
+            data=task_status,
+            message="批量分类任务已启动"
+        )
+
+    except Exception as e:
+        logger.error(f"启动批量分类任务失败: {str(e)}")
+        return ResponseHandler.error(message="启动批量分类任务失败", error=e)
+
+
+@router.post("/{card_id}/classify")
+def classify_single_card(card_id: int, db: Session = Depends(get_db)):
+    """重新分类单张名片"""
+    try:
+        card = db.query(CardORM).filter(CardORM.id == card_id).first()
+        if not card:
+            return ResponseHandler.error(message=f"找不到ID为 {card_id} 的名片", status_code=404)
+
+        classifier = IndustryClassificationService()
+        company = card.company_name_zh or card.company_name_en or ''
+        position = card.position_zh or card.position_en or ''
+
+        result = classifier.classify_single(company, position)
+
+        # 更新数据库
+        card.industry_category = result['category']
+        card.classification_confidence = result['confidence']
+        card.classification_reason = result['reason']
+        card.classified_at = datetime.utcnow()
 
         db.commit()
 
-        # 清除緩存
+        # 清除缓存
         cache_key = f"card_{card_id}"
         cache.delete(cache_key)
 
         return ResponseHandler.success(
             data={
                 "card_id": card_id,
-                "added_tags": new_tags,
-                "total_tags": len(existing_tag_names) + len(new_tags)
+                "industry_category": result['category'],
+                "confidence": result['confidence'],
+                "reason": result['reason']
             },
-            message=f"成功添加 {len(new_tags)} 個標籤"
+            message="分类成功"
         )
 
     except Exception as e:
-        logger.error(f"添加標籤失敗: {str(e)}")
+        logger.error(f"分类失败: {str(e)}")
         db.rollback()
-        return ResponseHandler.error(
-            message="添加標籤失敗",
-            error=e,
-            status_code=400
-        )
+        return ResponseHandler.error(message="分类失败", error=e)
 
 
-@router.get("/{card_id}/tags", response_model=List[TagResponse])
-def get_card_tags(card_id: int, db: Session = Depends(get_db)):
-    """獲取名片的所有標籤"""
+# ==================== Task Management Endpoints ====================
+
+@router.get("/tasks/{task_id}")
+def get_task_status(task_id: str):
+    """获取任务状态"""
     try:
-        # 檢查名片是否存在
-        card = get_card(db, card_id)
-        if not card:
+        task_status = task_manager.get_status(task_id)
+
+        if not task_status:
             return ResponseHandler.error(
-                message=f"找不到ID為 {card_id} 的名片",
+                message=f"找不到任务 {task_id}",
                 status_code=404
             )
 
-        # 獲取標籤
-        tags = db.query(CardTagORM).filter(CardTagORM.card_id == card_id).all()
-
         return ResponseHandler.success(
-            data=[{
-                "id": tag.id,
-                "card_id": tag.card_id,
-                "tag_name": tag.tag_name,
-                "tag_type": tag.tag_type,
-                "created_at": tag.created_at.isoformat() if tag.created_at else None
-            } for tag in tags],
-            message="獲取標籤列表成功"
+            data=task_status,
+            message="获取任务状态成功"
         )
 
     except Exception as e:
-        logger.error(f"獲取標籤失敗: {str(e)}")
-        return ResponseHandler.error(
-            message="獲取標籤失敗",
-            error=e
-        )
+        logger.error(f"获取任务状态失败: {str(e)}")
+        return ResponseHandler.error(message="获取任务状态失败", error=e)
 
 
-@router.delete("/{card_id}/tags/{tag_id}")
-def remove_tag_from_card(card_id: int, tag_id: int, db: Session = Depends(get_db)):
-    """從名片移除指定標籤"""
+@router.post("/tasks/{task_id}/cancel")
+def cancel_task(task_id: str):
+    """取消任务"""
     try:
-        # 檢查標籤是否存在
-        tag = db.query(CardTagORM).filter(
-            CardTagORM.id == tag_id,
-            CardTagORM.card_id == card_id
-        ).first()
+        task = task_manager.get_task(task_id)
 
-        if not tag:
+        if not task:
             return ResponseHandler.error(
-                message=f"找不到標籤 ID {tag_id}",
+                message=f"找不到任务 {task_id}",
                 status_code=404
             )
 
-        db.delete(tag)
-        db.commit()
-
-        # 清除緩存
-        cache_key = f"card_{card_id}"
-        cache.delete(cache_key)
+        # 取消任务
+        task_manager.cancel_task(task_id)
 
         return ResponseHandler.success(
-            message="標籤刪除成功"
+            data={"task_id": task_id, "status": "cancelled"},
+            message="任务已取消"
         )
 
     except Exception as e:
-        logger.error(f"刪除標籤失敗: {str(e)}")
-        db.rollback()
-        return ResponseHandler.error(
-            message="刪除標籤失敗",
-            error=e,
-            status_code=400
-        )
-
-
-@router.get("/tags/list")
-def get_all_tags(db: Session = Depends(get_db)):
-    """獲取所有標籤列表（帶使用次數統計）"""
-    try:
-        from sqlalchemy import func
-
-        # 查詢所有標籤及其使用次數
-        tags = db.query(
-            CardTagORM.tag_name,
-            CardTagORM.tag_type,
-            func.count(CardTagORM.id).label('count')
-        ).group_by(
-            CardTagORM.tag_name,
-            CardTagORM.tag_type
-        ).order_by(
-            func.count(CardTagORM.id).desc()
-        ).all()
-
-        result = [{
-            "tag_name": tag.tag_name,
-            "tag_type": tag.tag_type,
-            "count": tag.count
-        } for tag in tags]
-
-        return ResponseHandler.success(
-            data=result,
-            message="獲取標籤列表成功"
-        )
-
-    except Exception as e:
-        logger.error(f"獲取標籤列表失敗: {str(e)}")
-        return ResponseHandler.error(
-            message="獲取標籤列表失敗",
-            error=e
-        ) 
+        logger.error(f"取消任务失败: {str(e)}")
+        return ResponseHandler.error(message="取消任务失败", error=e) 

@@ -27,7 +27,6 @@ import { API_BASE_URL } from '../config';
 import { getCameraManager } from '../utils/cameraManager';
 import { getDeviceType } from '../utils/deviceDetector';
 import MobileCameraModal from '../components/MobileCameraModal';
-import QuickTagPanel from '../components/tags/QuickTagPanel';
 
 const ScanUploadPage = () => {
   const navigate = useNavigate();
@@ -552,11 +551,6 @@ const ScanUploadPage = () => {
   // 相冊上傳功能（代替批量導入）
   const [uploading, setUploading] = useState(false);
 
-  // 快速標籤面板狀態
-  const [showQuickTagPanel, setShowQuickTagPanel] = useState(false);
-  const [savedCardId, setSavedCardId] = useState(null);
-  const [savedCardData, setSavedCardData] = useState(null);
-
   // 相冊上傳處理（支持單張或多張）
   const handleMultipleFileSelect = async (event) => {
     const files = Array.from(event.target.files);
@@ -710,12 +704,8 @@ const ScanUploadPage = () => {
           position: 'center',
         });
 
-        // 保存名片ID和數據，用於快速標籤面板
-        setSavedCardId(createdCard.id);
-        setSavedCardData(cardData);
-
-        // 顯示快速標籤面板
-        setShowQuickTagPanel(true);
+        // 直接跳转到列表页
+        setTimeout(() => navigate('/cards'), 1000);
       }
     } catch (error) {
       console.error('保存失敗', { 
@@ -742,58 +732,6 @@ const ScanUploadPage = () => {
       ...prev,
       [field]: value
     }));
-  };
-
-  // 快速標籤面板處理函數
-  const handleQuickTagPanelClose = () => {
-    setShowQuickTagPanel(false);
-
-    // 清空表單
-    setCardData({
-      // 基本資訊（中英文）
-      name_zh: '',
-      name_en: '',
-      company_name_zh: '',
-      company_name_en: '',
-      position_zh: '',
-      position_en: '',
-      position1_zh: '',
-      position1_en: '',
-
-      // 部門組織架構（中英文，三層）
-      department1_zh: '',
-      department1_en: '',
-      department2_zh: '',
-      department2_en: '',
-      department3_zh: '',
-      department3_en: '',
-
-      // 聯絡資訊
-      mobile_phone: '',
-      company_phone1: '',
-      company_phone2: '',
-      email: '',
-      line_id: '',
-
-      // 地址資訊（中英文）
-      company_address1_zh: '',
-      company_address1_en: '',
-      company_address2_zh: '',
-      company_address2_en: '',
-
-      // 備註資訊
-      note1: '',
-      note2: ''
-    });
-    setFrontImage({ file: null, preview: null, ocrText: '', parseStatus: null });
-    setBackImage({ file: null, preview: null, ocrText: '', parseStatus: null });
-
-    // 導航到名片管理頁面
-    navigate('/cards');
-  };
-
-  const handleTagsAdded = (tags) => {
-    console.log('已添加標籤:', tags);
   };
 
   // 獲取解析狀態圖標和顏色
@@ -1307,15 +1245,6 @@ const ScanUploadPage = () => {
         multiple
         style={{ display: 'none' }}
         onChange={handleMultipleFileSelect}
-      />
-
-      {/* 快速標籤面板 */}
-      <QuickTagPanel
-        visible={showQuickTagPanel}
-        cardId={savedCardId}
-        cardData={savedCardData}
-        onClose={handleQuickTagPanelClose}
-        onTagsAdded={handleTagsAdded}
       />
     </div>
   );

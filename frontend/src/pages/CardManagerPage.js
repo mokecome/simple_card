@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { 
-  Card, 
-  Button, 
-  
-  Space, 
-  Toast, 
+import {
+  Card,
+  Button,
+
+  Space,
+  Toast,
   NavBar,
   Modal,
   Tag,
@@ -14,7 +14,8 @@ import {
   Empty,
   ProgressBar,
   InfiniteScroll,
-  DotLoading
+  DotLoading,
+  Selector
 } from 'antd-mobile';
 import {
   DeleteOutline,
@@ -46,16 +47,21 @@ const CardManagerPage = () => {
   const [currentPage, setCurrentPage] = useState(0);
   const pageSize = 20;
 
-  // 標籤篩選狀態
-  const [availableTags, setAvailableTags] = useState([]); // 所有可用標籤
-  const [selectedTags, setSelectedTags] = useState([]); // 已選擇的標籤
-  const [tagsLoading, setTagsLoading] = useState(false);
+  // 產業篩選狀態
+  const [industryFilter, setIndustryFilter] = useState('全部');
+  const [classifying, setClassifying] = useState(false);
+
+  // 批量分类任务状态
+  const [taskProgress, setTaskProgress] = useState(null); // {task_id, total, completed, status}
+  const [progressVisible, setProgressVisible] = useState(false);
+  const [pollingInterval, setPollingInterval] = useState(null);
   
   // 全局統計數據 - 不受篩選影響
   const [globalStats, setGlobalStats] = useState({
     total: 0,
     normal: 0,
-    problem: 0
+    problem: 0,
+    industry_stats: {}
   });
   
   // 高級篩選狀態
@@ -177,24 +183,134 @@ const CardManagerPage = () => {
     }
   };
 
-  // 載入所有可用標籤
-  const loadAvailableTags = async () => {
-    setTagsLoading(true);
+  // 批量AI分类（异步）
+  const handleBatchClassify = async () => {
+    setClassifying(true);
     try {
-      const response = await axios.get('/api/v1/cards/tags/list');
-      if (response.data && response.data.success && response.data.data) {
-        // 只取用戶標籤，按使用次數排序
-        const userTags = response.data.data
-          .filter(tag => tag.tag_type === 'user')
-          .sort((a, b) => b.count - a.count);
-        setAvailableTags(userTags);
+      const response = await axios.post('/api/v1/cards/classify-batch', {
+        card_ids: null // null 表示分类所有未分类的名片
+      });
+
+      if (response.data && response.data.success) {
+        const taskData = response.data.data;
+
+        // 如果没有需要分类的名片
+        if (taskData.total === 0) {
+          Toast.show({
+            content: '没有需要分类的名片',
+            position: 'center',
+          });
+          setClassifying(false);
+          return;
+        }
+
+        // 保存任务信息并显示进度对话框
+        setTaskProgress(taskData);
+        setProgressVisible(true);
+
+        // 开始轮询任务状态
+        startPolling(taskData.task_id);
       }
     } catch (error) {
-      console.error('載入標籤列表失敗:', error);
-    } finally {
-      setTagsLoading(false);
+      console.error('启动批量分类失败:', error);
+      Toast.show({
+        content: '启动批量分类失败',
+        position: 'center',
+      });
+      setClassifying(false);
     }
   };
+
+  // 轮询任务状态
+  const startPolling = (taskId) => {
+    const interval = setInterval(async () => {
+      try {
+        const response = await axios.get(`/api/v1/cards/tasks/${taskId}`);
+
+        if (response.data && response.data.success) {
+          const taskData = response.data.data;
+          setTaskProgress(taskData);
+
+          // 如果任务已完成、失败或取消，停止轮询
+          if (['completed', 'failed', 'cancelled'].includes(taskData.status)) {
+            clearInterval(interval);
+            setClassifying(false);
+
+            // 显示结果
+            if (taskData.status === 'completed') {
+              Toast.show({
+                content: `成功分类 ${taskData.success_count}/${taskData.total} 张名片`,
+                position: 'center',
+                duration: 3000
+              });
+              // 重新加载列表
+              loadCards();
+            } else if (taskData.status === 'failed') {
+              Toast.show({
+                content: `分类失败: ${taskData.error_message}`,
+                position: 'center',
+                duration: 3000
+              });
+            } else if (taskData.status === 'cancelled') {
+              Toast.show({
+                content: '任务已取消',
+                position: 'center',
+                duration: 2000
+              });
+            }
+
+            // 延迟关闭进度对话框
+            setTimeout(() => {
+              setProgressVisible(false);
+              setTaskProgress(null);
+            }, 2000);
+          }
+        }
+      } catch (error) {
+        console.error('轮询任务状态失败:', error);
+        clearInterval(interval);
+        setClassifying(false);
+        setProgressVisible(false);
+        Toast.show({
+          content: '获取任务状态失败',
+          position: 'center',
+        });
+      }
+    }, 2000); // 每2秒轮询一次
+
+    setPollingInterval(interval);
+  };
+
+  // 取消任务
+  const handleCancelTask = async () => {
+    if (!taskProgress || !taskProgress.task_id) return;
+
+    try {
+      const response = await axios.post(`/api/v1/cards/tasks/${taskProgress.task_id}/cancel`);
+
+      if (response.data && response.data.success) {
+        Toast.show({
+          content: '正在取消任务...',
+          position: 'center',
+        });
+      }
+    } catch (error) {
+      console.error('取消任务失败:', error);
+      Toast.show({
+        content: '取消任务失败',
+        position: 'center',
+      });
+    }
+  };
+
+  // 清理轮询
+  useEffect(() => {
+    return () => {
+      if (pollingInterval) {
+        clearInterval(pollingInterval);
+      }
+    };
+  }, [pollingInterval]);
 
   // 載入名片列表 - 真正的分頁實現
   const loadCards = async (isLoadMore = false) => {
@@ -213,7 +329,7 @@ const CardManagerPage = () => {
           skip: currentPageToLoad * pageSize,
           limit: pageSize,
           search: searchText || undefined,
-          tags: selectedTags.length > 0 ? selectedTags.join(',') : undefined // 標籤篩選
+          industry: industryFilter && industryFilter !== '全部' ? industryFilter : undefined // 產業篩選
         }
       });
       
@@ -252,7 +368,6 @@ const CardManagerPage = () => {
   useEffect(() => {
     loadCards();
     loadGlobalStats(); // 載入全局統計數據
-    loadAvailableTags(); // 載入可用標籤
   }, []);
 
   // 高級篩選邏輯
@@ -331,7 +446,7 @@ const CardManagerPage = () => {
     }, 300); // 防抖300ms
 
     return () => clearTimeout(timeoutId);
-  }, [searchText, selectedTags]);
+  }, [searchText, industryFilter]);
 
   // 客戶端篩選（狀態篩選和高級篩選）
   useEffect(() => {
@@ -405,22 +520,6 @@ const CardManagerPage = () => {
         }
       },
     });
-  };
-
-  // 標籤選擇處理
-  const handleTagSelect = (tagName) => {
-    if (selectedTags.includes(tagName)) {
-      // 取消選擇
-      setSelectedTags(selectedTags.filter(t => t !== tagName));
-    } else {
-      // 添加選擇
-      setSelectedTags([...selectedTags, tagName]);
-    }
-  };
-
-  // 清空標籤篩選
-  const handleClearTags = () => {
-    setSelectedTags([]);
   };
 
   // 匯出名片
@@ -787,13 +886,33 @@ const CardManagerPage = () => {
               </Tag>
             )}
           </div>
+          {/* 产业分类标签 */}
+          {card.industry_category && (
+            <div style={{ marginTop: '8px' }}>
+              <Tag
+                color={
+                  card.industry_category === '防詐' ? 'warning' :
+                  card.industry_category === '旅宿' ? 'success' :
+                  card.industry_category === '工業應用' ? 'primary' :
+                  card.industry_category === '食品業' ? 'default' :
+                  'default'
+                }
+                style={{ fontSize: '12px' }}
+              >
+                🏢 {card.industry_category}
+                {card.classification_confidence &&
+                  ` (${Math.round(card.classification_confidence)}%)`
+                }
+              </Tag>
+            </div>
+          )}
           {(card.department1_zh || card.department2_zh || card.department3_zh) && (
             <div style={{ marginTop: '4px', fontSize: '13px', color: '#666' }}>
-              <HighlightText 
+              <HighlightText
                 text={[card.department1_zh, card.department2_zh, card.department3_zh]
                   .filter(Boolean)
-                  .join(' / ')} 
-                keyword={searchText} 
+                  .join(' / ')}
+                keyword={searchText}
               />
             </div>
           )}
@@ -912,53 +1031,33 @@ const CardManagerPage = () => {
           style={{ marginBottom: '16px' }}
         />
 
-        {/* 標籤篩選 */}
-        {availableTags.length > 0 && (
-          <Card style={{ marginBottom: '16px' }}>
-            <div style={{ marginBottom: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: '14px', fontWeight: 'bold' }}>
-                標籤篩選 {selectedTags.length > 0 && `(已選 ${selectedTags.length})`}
-              </span>
-              {selectedTags.length > 0 && (
-                <Button
-                  size="mini"
-                  color="default"
-                  fill="none"
-                  onClick={handleClearTags}
-                  style={{ padding: '2px 8px', fontSize: '12px' }}
-                >
-                  清空
-                </Button>
-              )}
-            </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-              {tagsLoading ? (
-                <span style={{ fontSize: '13px', color: '#999' }}>載入標籤中...</span>
-              ) : (
-                availableTags.slice(0, 15).map((tag) => (
-                  <Tag
-                    key={tag.tag_name}
-                    color={selectedTags.includes(tag.tag_name) ? 'primary' : 'default'}
-                    style={{
-                      cursor: 'pointer',
-                      fontSize: '13px',
-                      padding: '4px 10px',
-                      border: selectedTags.includes(tag.tag_name) ? '1px solid #1890ff' : '1px solid #d9d9d9'
-                    }}
-                    onClick={() => handleTagSelect(tag.tag_name)}
-                  >
-                    {tag.tag_name} ({tag.count})
-                  </Tag>
-                ))
-              )}
-            </div>
-            {availableTags.length > 15 && (
-              <div style={{ marginTop: '8px', fontSize: '12px', color: '#999', textAlign: 'center' }}>
-                顯示最常用的 15 個標籤，共 {availableTags.length} 個標籤
-              </div>
-            )}
-          </Card>
-        )}
+        {/* 產業篩選和批量分類 */}
+        <Card style={{ marginBottom: '16px' }}>
+          <div style={{ marginBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '14px', fontWeight: 'bold' }}>產業篩選</span>
+            <Button
+              color="primary"
+              size="small"
+              onClick={handleBatchClassify}
+              loading={classifying}
+            >
+              🤖 批量AI分类
+            </Button>
+          </div>
+          <Selector
+            options={[
+              { label: '全部產業', value: '全部' },
+              { label: '防詐', value: '防詐' },
+              { label: '旅宿', value: '旅宿' },
+              { label: '工業應用', value: '工業應用' },
+              { label: '食品業', value: '食品業' },
+              { label: '其他', value: '其他' },
+            ]}
+            value={[industryFilter]}
+            onChange={(arr) => setIndustryFilter(arr[0] || '全部')}
+            style={{ '--border-radius': '8px' }}
+          />
+        </Card>
 
         {/* 篩選按鈕 */}
         <Card style={{ marginBottom: '16px' }}>
@@ -1291,7 +1390,7 @@ const CardManagerPage = () => {
             />
           ) : (
             <div>
-              {(searchText || Object.values(advancedFilters).some(v => v) || filterStatus !== 'all' || selectedTags.length > 0) && (
+              {(searchText || Object.values(advancedFilters).some(v => v) || filterStatus !== 'all' || industryFilter !== '全部') && (
                 <div style={{
                   marginBottom: '12px',
                   padding: '8px',
@@ -1302,10 +1401,28 @@ const CardManagerPage = () => {
                   border: '1px solid #91d5ff'
                 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span>🔍 顯示 {filteredCards.length} 張符合條件的名片</span>
-                    <span style={{ fontSize: '12px' }}>
+                    <span>
+                      {searchText && `'${searchText}' `}
+                      {industryFilter !== '全部' ? (
+                        // 特定產業：如果有篩選條件則顯示篩選後數量，否則顯示總數
+                        `📊 ${industryFilter}: ${
+                          searchText || Object.values(advancedFilters).some(v => v) || filterStatus !== 'all'
+                            ? filteredCards.length  // 有篩選條件：顯示篩選結果
+                            : (globalStats.industry_stats?.[industryFilter] || 0)  // 無篩選：顯示總數
+                        } 張`
+                      ) : (
+                        // 全部產業：顯示各產業統計
+                        globalStats.industry_stats && Object.keys(globalStats.industry_stats).length > 0 ? (
+                          `📊 ${Object.entries(globalStats.industry_stats)
+                            .sort(([,a], [,b]) => b - a)
+                            .map(([cat, count]) => `${cat}: ${count}`)
+                            .join(' | ')}`
+                        ) : '📊 載入中...'
+                      )}
+                    </span>
+                    <span style={{ fontSize: '12px', color: '#999' }}>
                       {searchText && `關鍵詞: "${searchText}"`}
-                      {selectedTags.length > 0 && ` | 標籤: ${selectedTags.join(', ')}`}
+                      {industryFilter !== '全部' && (searchText ? ' | ' : '') + `產業: ${industryFilter}`}
                       {Object.values(advancedFilters).some(v => v) && " | 高級篩選"}
                       {filterStatus !== 'all' && ` | 狀態: ${filterStatus === 'normal' ? '正常' : '有問題'}`}
                     </span>
@@ -1407,6 +1524,105 @@ const CardManagerPage = () => {
             )}
           </div>
         </Modal>
+
+        {/* 批量分类进度对话框 */}
+        <Modal
+          visible={progressVisible}
+          content={
+            <div style={{ padding: '20px' }}>
+              <div style={{ textAlign: 'center', marginBottom: '20px' }}>
+                <h3 style={{ margin: '0 0 10px 0', fontSize: '18px' }}>🤖 AI 批量分类进行中</h3>
+                <p style={{ margin: 0, fontSize: '14px', color: '#666' }}>
+                  {taskProgress?.status === 'processing'
+                    ? '正在使用AI分析名片產業類別...'
+                    : taskProgress?.status === 'pending'
+                    ? '任务准备中...'
+                    : taskProgress?.status === 'completed'
+                    ? '分类完成！'
+                    : taskProgress?.status === 'failed'
+                    ? '分类失败'
+                    : '任务已取消'}
+                </p>
+              </div>
+
+              {taskProgress && (
+                <>
+                  <div style={{ marginBottom: '16px' }}>
+                    <div style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      marginBottom: '8px',
+                      fontSize: '14px'
+                    }}>
+                      <span>进度：{taskProgress.completed} / {taskProgress.total}</span>
+                      <span>{taskProgress.progress_percent?.toFixed(1)}%</span>
+                    </div>
+                    <ProgressBar
+                      percent={taskProgress.progress_percent || 0}
+                      style={{
+                        '--fill-color': taskProgress.status === 'failed' ? '#ff4d4f' : '#1677ff',
+                      }}
+                    />
+                  </div>
+
+                  <div style={{
+                    padding: '12px',
+                    backgroundColor: '#f6f6f6',
+                    borderRadius: '6px',
+                    fontSize: '13px',
+                    marginBottom: '16px'
+                  }}>
+                    <div style={{ marginBottom: '6px' }}>
+                      <span style={{ color: '#666' }}>成功：</span>
+                      <span style={{ color: '#52c41a', fontWeight: 'bold' }}>
+                        {taskProgress.success_count || 0}
+                      </span>
+                    </div>
+                    <div>
+                      <span style={{ color: '#666' }}>失败：</span>
+                      <span style={{ color: '#ff4d4f', fontWeight: 'bold' }}>
+                        {taskProgress.failed || 0}
+                      </span>
+                    </div>
+                  </div>
+
+                  {taskProgress.error_message && (
+                    <div style={{
+                      padding: '12px',
+                      backgroundColor: '#fff2e8',
+                      border: '1px solid #ffbb96',
+                      borderRadius: '6px',
+                      fontSize: '13px',
+                      color: '#d4380d'
+                    }}>
+                      ⚠️ {taskProgress.error_message}
+                    </div>
+                  )}
+
+                  {taskProgress.status === 'processing' && (
+                    <Button
+                      block
+                      color="danger"
+                      onClick={handleCancelTask}
+                      style={{ marginTop: '16px' }}
+                    >
+                      取消任务
+                    </Button>
+                  )}
+                </>
+              )}
+            </div>
+          }
+          closeOnMaskClick={false}
+          showCloseButton={taskProgress?.status !== 'processing'}
+          onClose={() => {
+            setProgressVisible(false);
+            setTaskProgress(null);
+            if (pollingInterval) {
+              clearInterval(pollingInterval);
+            }
+          }}
+        />
       </div>
     </div>
   );
