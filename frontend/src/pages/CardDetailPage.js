@@ -20,7 +20,8 @@ import {
   EditSOutline,
   EyeOutline,
   DeleteOutline,
-  PictureOutline
+  PictureOutline,
+  StarOutline
 } from 'antd-mobile-icons';
 import { Image, ImageViewer } from 'antd-mobile';
 import axios from 'axios';
@@ -71,11 +72,11 @@ const CardDetailPage = () => {
     note1: '',                   // 備註1
     note2: '',                   // 備註2
 
-    // 产业分类信息
-    industry_category: '',       // 产业分类
-    classification_confidence: null, // 分类置信度
-    classification_reason: '',   // 分类原因
-    classified_at: '',           // 分类时间
+    // 產業分類信息
+    industry_category: '',       // 產業分類
+    classification_confidence: null, // 分類置信度
+    classification_reason: '',   // 分類原因
+    classified_at: '',           // 分類時間
 
     created_at: '',              // 創建時間
     updated_at: ''               // 更新時間
@@ -835,12 +836,12 @@ const CardDetailPage = () => {
               </div>
             </div>
 
-            {/* 产业分类信息 */}
+            {/* 產業分類信息 */}
             {!isEditing && (
               <div className="form-section">
                 <Divider>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-                    <span>产业分类</span>
+                    <span>產業分類</span>
                     <Button
                       color="primary"
                       size="small"
@@ -848,7 +849,8 @@ const CardDetailPage = () => {
                       loading={classifying}
                       style={{ marginLeft: '12px' }}
                     >
-                      🤖 重新分类
+                      <StarOutline style={{ marginRight: '4px' }} />
+                      重新分類
                     </Button>
                   </div>
                 </Divider>
@@ -881,7 +883,7 @@ const CardDetailPage = () => {
                     )}
 
                     {cardData.classified_at && (
-                      <Form.Item label="分类时间">
+                      <Form.Item label="分類時間">
                         <div style={{ padding: '8px 0', fontSize: '14px', color: '#999' }}>
                           {formatDate(cardData.classified_at)}
                         </div>
@@ -890,7 +892,7 @@ const CardDetailPage = () => {
                   </>
                 ) : (
                   <div style={{ padding: '16px', textAlign: 'center', color: '#999' }}>
-                    暂无产业分类信息，点击「重新分类」按钮进行AI自动分类
+                    暫無產業分類信息，點擊「重新分類」按鈕進行AI自動分類
                   </div>
                 )}
               </div>

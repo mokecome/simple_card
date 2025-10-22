@@ -27,7 +27,8 @@ import {
   MailOutline,
   EnvironmentOutline,
   UploadOutline,
-  PictureOutline
+  PictureOutline,
+  StarOutline
 } from 'antd-mobile-icons';
 import { Image, ImageViewer } from 'antd-mobile';
 import axios from 'axios';
@@ -886,7 +887,7 @@ const CardManagerPage = () => {
               </Tag>
             )}
           </div>
-          {/* 产业分类标签 */}
+          {/* 產業分類標籤 */}
           {card.industry_category && (
             <div style={{ marginTop: '8px' }}>
               <Tag
@@ -1041,7 +1042,8 @@ const CardManagerPage = () => {
               onClick={handleBatchClassify}
               loading={classifying}
             >
-              🤖 批量AI分类
+              <StarOutline style={{ marginRight: '4px' }} />
+              批量AI分類
             </Button>
           </div>
           <Selector
@@ -1531,12 +1533,15 @@ const CardManagerPage = () => {
           content={
             <div style={{ padding: '20px' }}>
               <div style={{ textAlign: 'center', marginBottom: '20px' }}>
-                <h3 style={{ margin: '0 0 10px 0', fontSize: '18px' }}>🤖 AI 批量分类进行中</h3>
+                <h3 style={{ margin: '0 0 10px 0', fontSize: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                  <StarOutline style={{ fontSize: '20px' }} />
+                  AI 批量分類進行中
+                </h3>
                 <p style={{ margin: 0, fontSize: '14px', color: '#666' }}>
                   {taskProgress?.status === 'processing'
                     ? '正在使用AI分析名片產業類別...'
                     : taskProgress?.status === 'pending'
-                    ? '任务准备中...'
+                    ? '任務準備中...'
                     : taskProgress?.status === 'completed'
                     ? '分类完成！'
                     : taskProgress?.status === 'failed'
