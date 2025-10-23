@@ -1,6 +1,6 @@
 from backend.models.card import CardORM, Card
 from sqlalchemy.orm import Session
-from typing import List, Tuple, Optional
+from typing import Dict, Iterator, List, Optional, Tuple
 from sqlalchemy import and_, or_, func
 import datetime
 
@@ -25,6 +25,58 @@ def get_cards(db: Session) -> List[dict]:
 
         result.append(card_dict)
     return result
+
+def iterate_cards_for_stats(db: Session, chunk_size: int = 500) -> Iterator[Dict[str, Optional[str]]]:
+    """以最小欄位集批次迭代名片，用於統計計算"""
+    query = (
+        db.query(
+            CardORM.name_zh,
+            CardORM.name_en,
+            CardORM.company_name_zh,
+            CardORM.company_name_en,
+            CardORM.position_zh,
+            CardORM.position_en,
+            CardORM.position1_zh,
+            CardORM.position1_en,
+            CardORM.department1_zh,
+            CardORM.department1_en,
+            CardORM.department2_zh,
+            CardORM.department2_en,
+            CardORM.department3_zh,
+            CardORM.department3_en,
+            CardORM.mobile_phone,
+            CardORM.company_phone1,
+            CardORM.company_phone2,
+            CardORM.email,
+            CardORM.line_id,
+            CardORM.industry_category
+        )
+        .order_by(CardORM.created_at.desc())
+    )
+
+    for row in query.yield_per(chunk_size):
+        yield {
+            "name_zh": row.name_zh,
+            "name_en": row.name_en,
+            "company_name_zh": row.company_name_zh,
+            "company_name_en": row.company_name_en,
+            "position_zh": row.position_zh,
+            "position_en": row.position_en,
+            "position1_zh": row.position1_zh,
+            "position1_en": row.position1_en,
+            "department1_zh": row.department1_zh,
+            "department1_en": row.department1_en,
+            "department2_zh": row.department2_zh,
+            "department2_en": row.department2_en,
+            "department3_zh": row.department3_zh,
+            "department3_en": row.department3_en,
+            "mobile_phone": row.mobile_phone,
+            "company_phone1": row.company_phone1,
+            "company_phone2": row.company_phone2,
+            "email": row.email,
+            "line_id": row.line_id,
+            "industry_category": row.industry_category
+        }
 
 def get_cards_paginated(
     db: Session,

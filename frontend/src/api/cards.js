@@ -74,7 +74,16 @@ export const getCards = () => api.get('/cards/');
 
 export const getCard = (id) => api.get(`/cards/${id}`);
 
-export const createCard = (cardData) => api.post('/cards/', cardData);
+export const createCard = (cardData) => {
+  if (cardData instanceof FormData) {
+    return api.post('/cards/', cardData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+  }
+  return api.post('/cards/', cardData);
+};
 
 export const updateCard = (id, cardData) => api.put(`/cards/${id}`, cardData);
 

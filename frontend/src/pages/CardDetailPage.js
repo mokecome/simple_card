@@ -12,7 +12,8 @@ import {
   Divider,
   Loading,
   Dialog,
-  Tag
+  Tag,
+  Picker
 } from 'antd-mobile';
 import {
   CheckOutline,
@@ -21,7 +22,8 @@ import {
   EyeOutline,
   DeleteOutline,
   PictureOutline,
-  StarOutline
+  StarOutline,
+  DownOutline
 } from 'antd-mobile-icons';
 import { Image, ImageViewer } from 'antd-mobile';
 import axios from 'axios';
@@ -33,6 +35,7 @@ const CardDetailPage = () => {
   const [saving, setSaving] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [classifying, setClassifying] = useState(false);
+  const [industryPickerVisible, setIndustryPickerVisible] = useState(false);
   
   // 統一的名片資料狀態 - 與資料庫欄位名稱保持一致
   const [cardData, setCardData] = useState({
@@ -234,6 +237,14 @@ const CardDetailPage = () => {
     });
   };
 
+  const industryOptions = [
+    { label: '防詐', value: '防詐' },
+    { label: '旅宿', value: '旅宿' },
+    { label: '工業應用', value: '工業應用' },
+    { label: '食品業', value: '食品業' },
+    { label: '其他', value: '其他' },
+  ];
+
   // 重新分类名片
   const handleReclassify = async () => {
     setClassifying(true);
@@ -241,14 +252,15 @@ const CardDetailPage = () => {
       const response = await axios.post(`/api/v1/cards/${id}/classify`);
 
       if (response.data && response.data.success) {
-        const { industry_category, classification_confidence, classified_at } = response.data.data;
+        const { industry_category, classification_confidence, classified_at, reason } = response.data.data;
 
         // 更新cardData状态
         setCardData(prevData => ({
           ...prevData,
           industry_category,
           classification_confidence,
-          classified_at
+          classified_at,
+          classification_reason: reason || prevData.classification_reason
         }));
 
         Toast.show({
@@ -837,11 +849,11 @@ const CardDetailPage = () => {
             </div>
 
             {/* 產業分類信息 */}
-            {!isEditing && (
-              <div className="form-section">
-                <Divider>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-                    <span>產業分類</span>
+            <div className="form-section">
+              <Divider>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                  <span>產業分類</span>
+                  {!isEditing && (
                     <Button
                       color="primary"
                       size="small"
@@ -852,51 +864,100 @@ const CardDetailPage = () => {
                       <StarOutline style={{ marginRight: '4px' }} />
                       重新分類
                     </Button>
-                  </div>
-                </Divider>
+                  )}
+                </div>
+              </Divider>
 
-                {cardData.industry_category ? (
-                  <>
-                    <Form.Item label="產業類別">
-                      <div style={{ padding: '8px 0', fontSize: '16px' }}>
-                        <Tag
-                          color={
-                            cardData.industry_category === '防詐' ? 'warning' :
-                            cardData.industry_category === '旅宿' ? 'success' :
-                            cardData.industry_category === '工業應用' ? 'primary' :
-                            cardData.industry_category === '食品業' ? 'default' :
-                            'default'
-                          }
-                          style={{ fontSize: '14px' }}
-                        >
-                          🏢 {cardData.industry_category}
-                        </Tag>
+              {isEditing ? (
+                <Form.Item label="產業類別">
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <div
+                      onClick={() => setIndustryPickerVisible(true)}
+                      style={{
+                        border: '1px solid #d9d9d9',
+                        borderRadius: '10px',
+                        padding: '10px 14px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        cursor: 'pointer',
+                        backgroundColor: '#fff',
+                        color: cardData.industry_category ? '#262626' : '#bfbfbf',
+                        fontSize: '15px',
+                        flex: '0 0 10%',
+                        minWidth: '160px'
+                      }}
+                    >
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: '12px' }}>
+                        {cardData.industry_category || '請選擇產業類別'}
+                      </span>
+                      <DownOutline style={{ fontSize: '14px', color: '#8c8c8c' }} />
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                      <Button
+                        size="small"
+                        fill="outline"
+                        color="primary"
+                        onClick={handleReclassify}
+                        loading={classifying}
+                      >
+                        <StarOutline style={{ marginRight: '4px' }} />
+                        AI 重新分類
+                      </Button>
+                    </div>
+                  </div>
+                  <Picker
+                    columns={[industryOptions]}
+                    visible={industryPickerVisible}
+                    value={cardData.industry_category ? [cardData.industry_category] : []}
+                    onClose={() => setIndustryPickerVisible(false)}
+                    onConfirm={(values) => {
+                      setIndustryPickerVisible(false);
+                      handleFieldChange('industry_category', values?.[0] || '');
+                    }}
+                  />
+                </Form.Item>
+              ) : cardData.industry_category ? (
+                <>
+                  <Form.Item label="產業類別">
+                    <div style={{ padding: '8px 0', fontSize: '16px' }}>
+                      <Tag
+                        color={
+                          cardData.industry_category === '防詐' ? 'warning' :
+                          cardData.industry_category === '旅宿' ? 'success' :
+                          cardData.industry_category === '工業應用' ? 'primary' :
+                          cardData.industry_category === '食品業' ? 'default' :
+                          'default'
+                        }
+                        style={{ fontSize: '14px' }}
+                      >
+                        🏢 {cardData.industry_category}
+                      </Tag>
+                    </div>
+                  </Form.Item>
+
+                  {cardData.classification_confidence && (
+                    <Form.Item label="置信度">
+                      <div style={{ padding: '8px 0', fontSize: '14px', color: '#666' }}>
+                        {Number(cardData.classification_confidence).toFixed(1)}%
                       </div>
                     </Form.Item>
+                  )}
 
-                    {cardData.classification_confidence && (
-                      <Form.Item label="置信度">
-                        <div style={{ padding: '8px 0', fontSize: '14px', color: '#666' }}>
-                          {Number(cardData.classification_confidence).toFixed(1)}%
-                        </div>
-                      </Form.Item>
-                    )}
-
-                    {cardData.classified_at && (
-                      <Form.Item label="分類時間">
-                        <div style={{ padding: '8px 0', fontSize: '14px', color: '#999' }}>
-                          {formatDate(cardData.classified_at)}
-                        </div>
-                      </Form.Item>
-                    )}
-                  </>
-                ) : (
-                  <div style={{ padding: '16px', textAlign: 'center', color: '#999' }}>
-                    暫無產業分類信息，點擊「重新分類」按鈕進行AI自動分類
-                  </div>
-                )}
-              </div>
-            )}
+                  {cardData.classified_at && (
+                    <Form.Item label="分類時間">
+                      <div style={{ padding: '8px 0', fontSize: '14px', color: '#999' }}>
+                        {formatDate(cardData.classified_at)}
+                      </div>
+                    </Form.Item>
+                  )}
+                </>
+              ) : (
+                <div style={{ padding: '16px', textAlign: 'center', color: '#999' }}>
+                  暫無產業分類信息，可手動選擇或點擊「AI 重新分類」
+                </div>
+              )}
+            </div>
 
             {/* 時間資訊 */}
             {!isEditing && (

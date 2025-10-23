@@ -1,10 +1,9 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { 
-  Card, 
-  Button, 
-  Space, 
-  Toast, 
+import {
+  Card,
+  Button,
+  Space,
   NavBar,
   Form,
   Input,
@@ -13,7 +12,7 @@ import {
 } from 'antd-mobile';
 import { CheckOutline, UserContactOutline } from 'antd-mobile-icons';
 import { createCard } from '../api/cards';
-import { showSuccess, showError } from '../utils/errorHandler';
+import { handleApiError, showSuccess, showError } from '../utils/errorHandler';
 
 const AddCardPage = () => {
   const navigate = useNavigate();
@@ -22,21 +21,21 @@ const AddCardPage = () => {
   // 統一的名片資料狀態 - 與OCR掃描頁面保持一致的22個欄位
   const [cardData, setCardData] = useState({
     // 基本資訊（中英文）
-    name: '',                    // 姓名
+    name_zh: '',                 // 姓名(中文)
     name_en: '',                 // 英文姓名
-    company_name: '',            // 公司名稱
+    company_name_zh: '',         // 公司名稱(中文)
     company_name_en: '',         // 英文公司名稱
-    position: '',                // 職位
+    position_zh: '',             // 職位(中文)
     position_en: '',             // 英文職位
-    position1: '',               // 職位1(中文)
+    position1_zh: '',            // 職位1(中文)
     position1_en: '',            // 職位1(英文)
     
     // 部門組織架構（中英文，三層）
-    department1: '',             // 部門1(中文)
+    department1_zh: '',          // 部門1(中文)
     department1_en: '',          // 部門1(英文)
-    department2: '',             // 部門2(中文)
+    department2_zh: '',          // 部門2(中文)
     department2_en: '',          // 部門2(英文)
-    department3: '',             // 部門3(中文)
+    department3_zh: '',          // 部門3(中文)
     department3_en: '',          // 部門3(英文)
     
     // 聯絡資訊
@@ -47,9 +46,9 @@ const AddCardPage = () => {
     line_id: '',                 // Line ID
     
     // 地址資訊（中英文）
-    company_address1: '',        // 公司地址一(中文)
+    company_address1_zh: '',     // 公司地址一(中文)
     company_address1_en: '',     // 公司地址一(英文)
-    company_address2: '',        // 公司地址二(中文)
+    company_address2_zh: '',     // 公司地址二(中文)
     company_address2_en: '',     // 公司地址二(英文)
     
     // 備註資訊
@@ -68,12 +67,11 @@ const AddCardPage = () => {
   // 保存名片資料
   const handleSave = async () => {
     // 驗證必填欄位
-    if (!cardData.name.trim()) {
+    if (!cardData.name_zh.trim()) {
       showError('請輸入姓名');
       return;
     }
 
-    // 使用ApiWrapper統一處理錯誤和加載狀態
     const saveCard = async () => {
       const saveData = new FormData();
       
@@ -90,26 +88,18 @@ const AddCardPage = () => {
 
     try {
       setLoading(true);
-      
-      await ApiWrapper.call(
-        saveCard,
-        { 
-          action: 'create_card',
-          component: 'AddCardPage',
-          cardName: cardData.name 
-        },
-        {
-          showLoading: false, // 我們自己管理loading狀態
-          successMessage: '名片新增成功！'
-        }
-      );
+      await saveCard();
+      showSuccess('名片新增成功！');
 
       // 成功後導航到名片管理頁面
       navigate('/cards');
       
     } catch (error) {
-      // ApiWrapper已經處理了錯誤顯示，這裡只需要記錄
-      console.error('創建名片失敗:', error);
+      handleApiError(error, { 
+        action: 'create_card',
+        component: 'AddCardPage',
+        cardName: cardData.name_zh
+      });
     } finally {
       setLoading(false);
     }
@@ -119,21 +109,21 @@ const AddCardPage = () => {
   const handleReset = () => {
     setCardData({
       // 基本資訊（中英文）
-      name: '',
+      name_zh: '',
       name_en: '',
-      company_name: '',
+      company_name_zh: '',
       company_name_en: '',
-      position: '',
+      position_zh: '',
       position_en: '',
-      position1: '',
+      position1_zh: '',
       position1_en: '',
       
       // 部門組織架構（中英文，三層）
-      department1: '',
+      department1_zh: '',
       department1_en: '',
-      department2: '',
+      department2_zh: '',
       department2_en: '',
-      department3: '',
+      department3_zh: '',
       department3_en: '',
       
       // 聯絡資訊
@@ -144,9 +134,9 @@ const AddCardPage = () => {
       line_id: '',
       
       // 地址資訊（中英文）
-      company_address1: '',
+      company_address1_zh: '',
       company_address1_en: '',
-      company_address2: '',
+      company_address2_zh: '',
       company_address2_en: '',
       
       // 備註資訊
@@ -172,8 +162,8 @@ const AddCardPage = () => {
                 <Form.Item label="姓名">
                   <Input
                     placeholder="請輸入中文姓名"
-                    value={cardData.name}
-                    onChange={(value) => handleFieldChange('name', value)}
+                    value={cardData.name_zh}
+                    onChange={(value) => handleFieldChange('name_zh', value)}
                   />
                 </Form.Item>
                 
@@ -190,8 +180,8 @@ const AddCardPage = () => {
                 <Form.Item label="公司名稱">
                   <Input
                     placeholder="請輸入公司名稱"
-                    value={cardData.company_name}
-                    onChange={(value) => handleFieldChange('company_name', value)}
+                    value={cardData.company_name_zh}
+                    onChange={(value) => handleFieldChange('company_name_zh', value)}
                   />
                 </Form.Item>
                 
@@ -208,8 +198,8 @@ const AddCardPage = () => {
                 <Form.Item label="職位1">
                   <Input
                     placeholder="請輸入職位1"
-                    value={cardData.position}
-                    onChange={(value) => handleFieldChange('position', value)}
+                    value={cardData.position_zh}
+                    onChange={(value) => handleFieldChange('position_zh', value)}
                   />
                 </Form.Item>
                 
@@ -226,8 +216,8 @@ const AddCardPage = () => {
                 <Form.Item label="職位2">
                   <Input
                     placeholder="請輸入職位2"
-                    value={cardData.position1}
-                    onChange={(value) => handleFieldChange('position1', value)}
+                    value={cardData.position1_zh}
+                    onChange={(value) => handleFieldChange('position1_zh', value)}
                   />
                 </Form.Item>
                 
@@ -249,8 +239,8 @@ const AddCardPage = () => {
                 <Form.Item label="部門1(單位1)">
                   <Input
                     placeholder="請輸入第一層部門"
-                    value={cardData.department1}
-                    onChange={(value) => handleFieldChange('department1', value)}
+                    value={cardData.department1_zh}
+                    onChange={(value) => handleFieldChange('department1_zh', value)}
                   />
                 </Form.Item>
                 
@@ -267,8 +257,8 @@ const AddCardPage = () => {
                 <Form.Item label="部門2(單位2)">
                   <Input
                     placeholder="請輸入第二層部門"
-                    value={cardData.department2}
-                    onChange={(value) => handleFieldChange('department2', value)}
+                    value={cardData.department2_zh}
+                    onChange={(value) => handleFieldChange('department2_zh', value)}
                   />
                 </Form.Item>
                 
@@ -285,8 +275,8 @@ const AddCardPage = () => {
                 <Form.Item label="部門3(單位3)">
                   <Input
                     placeholder="請輸入第三層部門"
-                    value={cardData.department3}
-                    onChange={(value) => handleFieldChange('department3', value)}
+                    value={cardData.department3_zh}
+                    onChange={(value) => handleFieldChange('department3_zh', value)}
                   />
                 </Form.Item>
                 
@@ -355,8 +345,8 @@ const AddCardPage = () => {
                 <Form.Item label="公司地址一">
                   <Input
                     placeholder="請輸入公司地址"
-                    value={cardData.company_address1}
-                    onChange={(value) => handleFieldChange('company_address1', value)}
+                    value={cardData.company_address1_zh}
+                    onChange={(value) => handleFieldChange('company_address1_zh', value)}
                   />
                 </Form.Item>
                 
@@ -373,8 +363,8 @@ const AddCardPage = () => {
                 <Form.Item label="公司地址二">
                   <Input
                     placeholder="請輸入公司地址（補充）"
-                    value={cardData.company_address2}
-                    onChange={(value) => handleFieldChange('company_address2', value)}
+                    value={cardData.company_address2_zh}
+                    onChange={(value) => handleFieldChange('company_address2_zh', value)}
                   />
                 </Form.Item>
                 

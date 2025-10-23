@@ -1,7 +1,17 @@
 from fastapi import APIRouter, Depends, UploadFile, File, Form, Query, HTTPException
 from sqlalchemy.orm import Session
 from backend.models.card import Card, CardORM
-from backend.services.card_service import get_cards, get_card, create_card, update_card, delete_card, bulk_create_cards, get_cards_paginated, get_cards_count
+from backend.services.card_service import (
+    get_cards,
+    get_card,
+    create_card,
+    update_card,
+    delete_card,
+    bulk_create_cards,
+    get_cards_paginated,
+    get_cards_count,
+    iterate_cards_for_stats,
+)
 from backend.services.industry_classification_service import IndustryClassificationService
 from backend.services.ocr_service import OCRService
 from backend.services.task_manager import task_manager
@@ -17,7 +27,7 @@ from backend.core.response import ResponseHandler
 from backend.core.cache import cache
 from backend.schemas.card import CardCreate, CardUpdate, CardResponse, ClassificationRequest, ClassificationResult, ClassificationBatchResponse
 from backend.schemas.task import BatchClassifyRequest, BatchClassifyResponse, TaskStatusResponse, TaskCancelResponse
-from typing import List, Optional
+from typing import Dict, List, Optional
 import threading
 from fastapi.responses import StreamingResponse
 import csv
@@ -37,6 +47,11 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+STATS_CACHE_KEY = "cards_stats"
+
+def invalidate_card_stats_cache() -> None:
+    """清除名片統計快取"""
+    cache.delete(STATS_CACHE_KEY)
 
 # 創建圖片存儲目錄
 UPLOAD_DIR = "output/card_images"
@@ -82,69 +97,70 @@ def list_cards(
 @router.get("/stats")
 def get_cards_stats(db: Session = Depends(get_db)):
     """獲取名片統計數據 - 全局統計，不受篩選影響"""
+    cached_stats = cache.get(STATS_CACHE_KEY)
+    if cached_stats is not None:
+        return ResponseHandler.success(
+            data=cached_stats,
+            message="獲取統計數據成功"
+        )
+
     try:
-        # 獲取所有名片進行統計
-        all_cards = get_cards(db)
-        
-        # 統計邏輯與前端保持一致
-        def check_card_status_backend(card):
+        def check_card_status_backend(card: Dict[str, Optional[str]]):
             """後端統計用的狀態檢查邏輯，與前端 checkCardStatus 保持一致"""
             missing_fields = []
-            
+
             # 檢查姓名 (中文OR英文)
-            name_zh = card.get('name_zh', '').strip() if card.get('name_zh') else ''
-            name_en = card.get('name_en', '').strip() if card.get('name_en') else ''
+            name_zh = (card.get('name_zh') or '').strip()
+            name_en = (card.get('name_en') or '').strip()
             if not (name_zh or name_en):
                 missing_fields.append('姓名')
-            
+
             # 檢查公司 (中文OR英文)
-            company_zh = card.get('company_name_zh', '').strip() if card.get('company_name_zh') else ''
-            company_en = card.get('company_name_en', '').strip() if card.get('company_name_en') else ''
+            company_zh = (card.get('company_name_zh') or '').strip()
+            company_en = (card.get('company_name_en') or '').strip()
             if not (company_zh or company_en):
                 missing_fields.append('公司')
-            
+
             # 檢查職位或部門 (職位或部門有其中一個即可)
-            position_zh = card.get('position_zh', '').strip() if card.get('position_zh') else ''
-            position_en = card.get('position_en', '').strip() if card.get('position_en') else ''
-            position1_zh = card.get('position1_zh', '').strip() if card.get('position1_zh') else ''
-            position1_en = card.get('position1_en', '').strip() if card.get('position1_en') else ''
+            position_zh = (card.get('position_zh') or '').strip()
+            position_en = (card.get('position_en') or '').strip()
+            position1_zh = (card.get('position1_zh') or '').strip()
+            position1_en = (card.get('position1_en') or '').strip()
             has_position = bool(position_zh or position_en or position1_zh or position1_en)
-            
-            dept1_zh = card.get('department1_zh', '').strip() if card.get('department1_zh') else ''
-            dept1_en = card.get('department1_en', '').strip() if card.get('department1_en') else ''
-            dept2_zh = card.get('department2_zh', '').strip() if card.get('department2_zh') else ''
-            dept2_en = card.get('department2_en', '').strip() if card.get('department2_en') else ''
-            dept3_zh = card.get('department3_zh', '').strip() if card.get('department3_zh') else ''
-            dept3_en = card.get('department3_en', '').strip() if card.get('department3_en') else ''
+
+            dept1_zh = (card.get('department1_zh') or '').strip()
+            dept1_en = (card.get('department1_en') or '').strip()
+            dept2_zh = (card.get('department2_zh') or '').strip()
+            dept2_en = (card.get('department2_en') or '').strip()
+            dept3_zh = (card.get('department3_zh') or '').strip()
+            dept3_en = (card.get('department3_en') or '').strip()
             has_department = bool(dept1_zh or dept1_en or dept2_zh or dept2_en or dept3_zh or dept3_en)
-            
+
             if not (has_position or has_department):
                 missing_fields.append('職位或部門')
-            
+
             # 檢查聯絡方式 (手機 OR 公司電話 OR Email OR Line ID，至少要有一個)
-            mobile = card.get('mobile_phone', '').strip() if card.get('mobile_phone') else ''
-            phone1 = card.get('company_phone1', '').strip() if card.get('company_phone1') else ''
-            phone2 = card.get('company_phone2', '').strip() if card.get('company_phone2') else ''
-            email = card.get('email', '').strip() if card.get('email') else ''
-            line_id = card.get('line_id', '').strip() if card.get('line_id') else ''
+            mobile = (card.get('mobile_phone') or '').strip()
+            phone1 = (card.get('company_phone1') or '').strip()
+            phone2 = (card.get('company_phone2') or '').strip()
+            email = (card.get('email') or '').strip()
+            line_id = (card.get('line_id') or '').strip()
             if not (mobile or phone1 or phone2 or email or line_id):
                 missing_fields.append('聯絡方式')
-            
+
             return {
                 'status': 'normal' if len(missing_fields) == 0 else 'problem',
                 'missing_fields': missing_fields,
                 'missing_count': len(missing_fields)
             }
-        
-        # 計算統計數據
-        total_count = len(all_cards)
+
+        total_count = 0
         normal_count = 0
         problem_count = 0
+        industry_stats: Dict[str, int] = {}
 
-        # 產業分類統計
-        industry_stats = {}
-
-        for card in all_cards:
+        for card in iterate_cards_for_stats(db):
+            total_count += 1
             card_status = check_card_status_backend(card)
             if card_status['status'] == 'normal':
                 normal_count += 1
@@ -152,7 +168,7 @@ def get_cards_stats(db: Session = Depends(get_db)):
                 problem_count += 1
 
             # 統計產業分類
-            industry = card.get('industry_category', '').strip() if card.get('industry_category') else ''
+            industry = (card.get('industry_category') or '').strip()
             if industry:
                 industry_stats[industry] = industry_stats.get(industry, 0) + 1
 
@@ -163,11 +179,13 @@ def get_cards_stats(db: Session = Depends(get_db)):
             'industry_stats': industry_stats
         }
 
+        cache.set(STATS_CACHE_KEY, stats_data, ttl_minutes=3)
+
         return ResponseHandler.success(
             data=stats_data,
             message="獲取統計數據成功"
         )
-        
+
     except Exception as e:
         logger.error(f"獲取統計數據失敗: {str(e)}")
         return ResponseHandler.error(
@@ -315,6 +333,7 @@ async def add_card(
         )
         
         created_card = create_card(db, card_data)
+        invalidate_card_stats_cache()
         return ResponseHandler.success(
             data=created_card,
             message="名片創建成功",
@@ -456,6 +475,7 @@ async def edit_card(
         # 清除緩存
         cache_key = f"card_{card_id}"
         cache.delete(cache_key)
+        invalidate_card_stats_cache()
         
         return ResponseHandler.success(
             data=updated,
@@ -523,7 +543,8 @@ def remove_card(card_id: int, db: Session = Depends(get_db)):
                 message="刪除名片失敗",
                 status_code=400
             )
-        
+
+        invalidate_card_stats_cache()
         return ResponseHandler.success(
             message="名片刪除成功"
         )
@@ -806,6 +827,7 @@ async def batch_import_cards(db: Session = Depends(get_db)):
             batch_service.log_memory_status("批量導入結束後")
             batch_service.cleanup_memory()
         
+        invalidate_card_stats_cache()
         # 返回處理結果
         result_message = f"批量導入完成！成功處理 {success_count}/{len(image_files)} 張名片"
         if error_list:
@@ -1068,6 +1090,7 @@ async def text_import_cards(file: UploadFile = File(...), db: Session = Depends(
             if len(error_list) > 0:
                 result_message += f"，失敗 {len(error_list)} 張"
                 
+            invalidate_card_stats_cache()
             return ResponseHandler.success(
                 data=final_stats,
                 message=result_message
@@ -1158,6 +1181,7 @@ def classify_cards_batch_async(
                                 card.classified_at = datetime.utcnow()
 
                     bg_db.commit()
+                    invalidate_card_stats_cache()
 
                     # 标记任务完成
                     task_manager.complete_task(task_id)
@@ -1217,6 +1241,7 @@ def classify_single_card(card_id: int, db: Session = Depends(get_db)):
         # 清除缓存
         cache_key = f"card_{card_id}"
         cache.delete(cache_key)
+        invalidate_card_stats_cache()
 
         return ResponseHandler.success(
             data={
