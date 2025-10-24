@@ -20,7 +20,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     DEBIAN_FRONTEND=noninteractive
 
 # 安裝系統依賴
-RUN apt-get update && apt-get install -y \
+RUN apt-get clean && \
+    rm -rf /var/lib/apt/lists/* && \
+    apt-get update --fix-missing && \
+    apt-get install -y --no-install-recommends \
     # OpenCV 依賴
     libglib2.0-0 \
     libsm6 \
@@ -29,7 +32,6 @@ RUN apt-get update && apt-get install -y \
     libgomp1 \
     libgl1-mesa-glx \
     # 圖像處理依賴
-    libglib2.0-0 \
     libxcb1 \
     libxdamage1 \
     libxfixes3 \
@@ -40,6 +42,7 @@ RUN apt-get update && apt-get install -y \
     nginx \
     supervisor \
     lsof \
+    && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
 # 設置工作目錄
