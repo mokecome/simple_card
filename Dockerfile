@@ -29,7 +29,6 @@ RUN apt-get update && apt-get install -y \
     libgomp1 \
     libgl1-mesa-glx \
     # 圖像處理依賴
-    libglib2.0-0 \
     libxcb1 \
     libxdamage1 \
     libxfixes3 \
