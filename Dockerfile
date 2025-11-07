@@ -20,16 +20,15 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     DEBIAN_FRONTEND=noninteractive
 
 # 安裝系統依賴
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     # OpenCV 依賴
     libglib2.0-0 \
     libsm6 \
     libxext6 \
     libxrender-dev \
     libgomp1 \
-    libgl1-mesa-glx \
+    libgl1 \
     # 圖像處理依賴
-    libglib2.0-0 \
     libxcb1 \
     libxdamage1 \
     libxfixes3 \
