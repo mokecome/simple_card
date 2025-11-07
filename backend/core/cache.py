@@ -3,7 +3,7 @@
 簡單的內存緩存實現
 """
 from datetime import datetime, timedelta
-from typing import Any, Optional, Dict
+from typing import Any, Dict
 import threading
 
 class SimpleCache:
@@ -11,40 +11,41 @@ class SimpleCache:
     
     def __init__(self):
         self._cache: Dict[str, Any] = {}
-        self._timestamps: Dict[str, datetime] = {}
+        self._expires_at: Dict[str, datetime] = {}
         self._lock = threading.Lock()
     
     def get(self, key: str, default: Any = None) -> Any:
         """獲取緩存值"""
         with self._lock:
             if key in self._cache:
-                # 檢查是否過期
-                if datetime.now() - self._timestamps[key] < timedelta(minutes=5):
+                expires_at = self._expires_at.get(key)
+                if expires_at and datetime.now() <= expires_at:
                     return self._cache[key]
-                else:
-                    # 過期則刪除
-                    del self._cache[key]
-                    del self._timestamps[key]
+                # 過期則刪除
+                del self._cache[key]
+                self._expires_at.pop(key, None)
             return default
     
     def set(self, key: str, value: Any, ttl_minutes: int = 5) -> None:
         """設置緩存值"""
         with self._lock:
             self._cache[key] = value
-            self._timestamps[key] = datetime.now()
+            # 存儲到期時間，確保自訂TTL生效
+            ttl_delta = timedelta(minutes=max(ttl_minutes, 0))
+            self._expires_at[key] = datetime.now() + ttl_delta if ttl_minutes else datetime.now()
     
     def delete(self, key: str) -> None:
         """刪除緩存值"""
         with self._lock:
             if key in self._cache:
                 del self._cache[key]
-                del self._timestamps[key]
+                self._expires_at.pop(key, None)
     
     def clear(self) -> None:
         """清空所有緩存"""
         with self._lock:
             self._cache.clear()
-            self._timestamps.clear()
+            self._expires_at.clear()
     
     def invalidate_pattern(self, pattern: str) -> None:
         """使匹配模式的緩存失效"""
@@ -52,7 +53,7 @@ class SimpleCache:
             keys_to_delete = [k for k in self._cache.keys() if pattern in k]
             for key in keys_to_delete:
                 del self._cache[key]
-                del self._timestamps[key]
+                self._expires_at.pop(key, None)
 
 # 全局緩存實例
 cache = SimpleCache()

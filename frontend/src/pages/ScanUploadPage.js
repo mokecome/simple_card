@@ -264,41 +264,43 @@ const ScanUploadPage = () => {
         const nonEmptyFields = Object.keys(parsedFields).filter(key => parsedFields[key] && typeof parsedFields[key] === 'string' && parsedFields[key].trim() !== '');
         console.log('[DEBUG] Non-empty fields from backend:', nonEmptyFields);
         console.log('[DEBUG] Non-empty fields count:', nonEmptyFields.length);
-        
-        let filledFieldsCount = 0;
+
+        // 使用對象引用來確保計數器在異步回調中正確更新
+        const countRef = { value: 0 };
+
         setCardData(prevData => {
           const updatedData = { ...prevData };
           console.log('[DEBUG] parsedFields:', parsedFields);
           console.log('[DEBUG] prevData before update:', prevData);
-          
+
           Object.keys(parsedFields).forEach(field => {
             const value = parsedFields[field];
             const currentValue = updatedData[field];
             const hasValue = value && typeof value === 'string' && value.trim() !== '';
             const shouldUpdate = hasValue && (!currentValue || currentValue.trim() === '');
-            
+
             console.log(`[DEBUG] Field: ${field}, Value: "${value}", HasValue: ${hasValue}, Current: "${currentValue}", ShouldUpdate: ${shouldUpdate}`);
-            
+
             if (shouldUpdate) {
               updatedData[field] = value.trim();
-              filledFieldsCount++;
+              countRef.value++;  // 使用對象屬性計數，確保外部能訪問到更新後的值
               console.log(`[DEBUG] Updated field ${field} = "${value.trim()}"`);
             }
           });
-          
+
           console.log('[DEBUG] updatedData after update:', updatedData);
-          console.log('[DEBUG] filledFieldsCount:', filledFieldsCount);
-          
-          // 確保計數器能正確捕獲
-          setTimeout(() => {
-            Toast.show({
-              content: `${side === 'front' ? '正面' : '反面'}資料解析完成！已自動填入${filledFieldsCount}個欄位`,
-              position: 'center',
-            });
-          }, 100);
-          
+          console.log('[DEBUG] filledFieldsCount:', countRef.value);
+
           return updatedData;
         });
+
+        // Toast 顯示邏輯移到 setCardData 外部，使用 countRef 確保獲取正確的計數
+        setTimeout(() => {
+          Toast.show({
+            content: `${side === 'front' ? '正面' : '反面'}資料解析完成！已自動填入${countRef.value}個欄位`,
+            position: 'center',
+          });
+        }, 100);
         
         // 日誌已移除
         updateImageParseStatus(side, 'success');

@@ -290,17 +290,15 @@ Please parse the following OCR text and return only JSON format: ''' + ocr_text
             except json.JSONDecodeError as e:
                 print(f"[ERROR] JSON parsing failed: {e}")
                 print(f"[ERROR] Raw response content: {result}")
-                return {
-                    "note1": f"JSON parsing failed: {str(e)}", 
-                    "note2": f"Raw OCR text: {ocr_text[:200]}..."
-                }
-                
+                print(f"[ERROR] OCR text preview: {ocr_text[:200]}...")
+                # Return empty dict instead of polluting note fields with error messages
+                return {}
+
         except Exception as e:
             print(f"[ERROR] Field parsing error: {e}")
-            return {
-                "note1": f"Parsing error: {str(e)}", 
-                "note2": f"Raw OCR text: {ocr_text[:200]}..."
-            }
+            print(f"[ERROR] OCR text preview: {ocr_text[:200]}...")
+            # Return empty dict instead of polluting note fields with error messages
+            return {}
     
     def log_message(self, message):
         """Output message to console"""

@@ -1,11 +1,11 @@
 import axios from 'axios';
 import { showError, showSuccess } from './errorHandler';
-import config from '../config';
+import { API_BASE_URL, API_TIMEOUT } from '../config';
 
 // 創建 axios 實例
 const apiClient = axios.create({
-  baseURL: config.api.baseUrl,
-  timeout: config.api.timeout,
+  baseURL: API_BASE_URL,
+  timeout: API_TIMEOUT,
   headers: {
     'Content-Type': 'application/json',
   },
