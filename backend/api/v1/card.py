@@ -35,6 +35,8 @@ import io
 import openpyxl
 import logging
 import os
+from pathlib import Path
+from backend.services.wcxf_import_service import WcxfImportService
 import shutil
 from datetime import datetime
 import glob
@@ -1109,6 +1111,81 @@ async def text_import_cards(file: UploadFile = File(...), db: Session = Depends(
             message=f"文本導入失敗: {str(e)}",
             status_code=500
         )
+
+
+@router.post("/wcxf-import")
+async def wcxf_import_cards(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    """
+    名片王匯入：上傳 .wcxf 檔，解析並批次寫入系統名片資料庫
+    """
+    try:
+        # 1. 檢查檔名與副檔名
+        if not file.filename:
+            return ResponseHandler.error(
+                message="文件名不能為空",
+                status_code=400
+            )
+        
+        file_extension = os.path.splitext(file.filename)[1].lower()
+        if file_extension != ".wcxf":
+            return ResponseHandler.error(
+                message=f"不支持的文件格式 {file_extension}，請上傳 .wcxf 檔案",
+                status_code=400
+            )
+        
+        # 2. 檔案大小檢查（跟文本導入一樣，防止太大）
+        content = await file.read()
+        file_size_mb = len(content) / (1024 * 1024)
+        max_size_mb = 50  # 50MB 限制
+        
+        if file_size_mb > max_size_mb:
+            return ResponseHandler.error(
+                message=f"文件過大（{file_size_mb:.1f}MB），請使用小於 {max_size_mb}MB 的文件",
+                status_code=413
+            )
+        
+        # 3. 存成暫存檔，交給 WcxfImportService 處理
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".wcxf") as temp_file:
+            temp_file.write(content)
+            temp_path = Path(temp_file.name)
+        
+        try:
+            logger.info(f"開始處理名片王匯入文件: {file.filename}")
+            
+            # 這裡直接呼叫你寫好的匯入服務
+            service = WcxfImportService(wcxf_path=temp_path)
+            result = service.run_import(db)
+            # result 會是類似：
+            # {"total": 19, "imported": 19, "failed": 0, ...}
+
+            # 組一段給前端看的訊息
+            msg = (
+                f"名片王匯入完成！"
+                f" 總筆數 {result.get('total', 0)}，"
+                f"成功 {result.get('imported', 0)}，"
+                f"失敗 {result.get('failed', 0)}"
+            )
+
+            return ResponseHandler.success(
+                data=result,
+                message=msg
+            )
+        
+        finally:
+            # 4. 刪掉暫存檔
+            try:
+                if temp_path.exists():
+                    os.unlink(temp_path)
+            except Exception as e:
+                logger.warning(f"清理名片王匯入暫存文件失敗: {e}")
+    
+    except Exception as e:
+        logger.error(f"名片王匯入過程中發生錯誤: {str(e)}")
+        return ResponseHandler.error(
+            message=f"名片王匯入失敗: {str(e)}",
+            status_code=500
+        )
+
 
 
 # ==================== AI Industry Classification Endpoints ====================

@@ -32,6 +32,7 @@ import {
 } from 'antd-mobile-icons';
 import { Image, ImageViewer } from 'antd-mobile';
 import axios from 'axios';
+import { getImageUrl } from '../utils/imageHelpers';
 
 const CardManagerPage = () => {
   const navigate = useNavigate(); 
@@ -78,21 +79,6 @@ const CardManagerPage = () => {
     hasEmail: null,
     hasAddress: null
   });
-
-  // 圖片路徑轉換為可訪問的URL
-  const getImageUrl = (imagePath) => {
-    if (!imagePath) return null;
-
-    // 處理 card_data/ 路徑
-    if (imagePath.startsWith('card_data/')) {
-      return `/static/${imagePath}`;
-    }
-    // 處理 output/card_images/ 路徑
-    if (imagePath.startsWith('output/card_images/')) {
-      return `/static/uploads/${imagePath.replace('output/card_images/', '')}`;
-    }
-    return imagePath;
-  };
 
   // 關鍵詞高亮組件
   const HighlightText = ({ text, keyword }) => {
@@ -565,8 +551,8 @@ const CardManagerPage = () => {
         'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         'text/csv'
       ];
-      const allowedExtensions = ['.xlsx', '.xls', '.csv'];
-      
+      //const allowedExtensions = ['.xlsx', '.xls', '.csv'];
+      const allowedExtensions = ['.wcxf'];
       const fileExtension = file.name.toLowerCase().substring(file.name.lastIndexOf('.'));
       
       // 檢查文件大小（50MB限制）
@@ -586,7 +572,8 @@ const CardManagerPage = () => {
         setUploadModalVisible(true);
       } else {
         Toast.show({
-          content: '請選擇 Excel (.xlsx, .xls) 或 CSV (.csv) 文件',
+          //content: '請選擇 Excel (.xlsx, .xls) 或 CSV (.csv) 文件',
+          content: '請選擇名片王匯出的 .wcxf 檔案',
           position: 'center',
         });
       }
@@ -595,11 +582,11 @@ const CardManagerPage = () => {
     event.target.value = '';
   };
 
-  // 執行文本導入
+  // 執行名片王匯入（WCXF）
   const handleTextImport = async () => {
     if (!uploadFile) {
       Toast.show({
-        content: '請先選擇文件',
+        content: '請先選擇檔案（.wcxf）',
         position: 'center',
       });
       return;
@@ -607,11 +594,12 @@ const CardManagerPage = () => {
 
     setUploadLoading(true);
     setUploadProgress(0);
+
     try {
       const formData = new FormData();
       formData.append('file', uploadFile);
 
-      // 模擬進度更新
+      // 模擬進度更新（保留你原本的體驗）
       const progressInterval = setInterval(() => {
         setUploadProgress(prev => {
           if (prev >= 90) {
@@ -622,62 +610,59 @@ const CardManagerPage = () => {
         });
       }, 500);
 
-      const response = await axios.post('/api/v1/cards/text-import', formData, {
+      const response = await axios.post('/api/v1/cards/wcxf-import', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
         onUploadProgress: (progressEvent) => {
-          const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-          setUploadProgress(percentCompleted * 0.5); // 上傳佔50%
+          if (!progressEvent.total) return;
+          const percentCompleted = Math.round(
+            (progressEvent.loaded * 100) / progressEvent.total
+          );
+          // 上傳階段佔 50%
+          setUploadProgress(percentCompleted * 0.5);
         },
       });
-      
+
       clearInterval(progressInterval);
       setUploadProgress(100);
 
       if (response.data && response.data.success) {
-        const stats = response.data.data;
-        
-        // 構建簡化的統計信息顯示
-        let simpleMessage = `✅ 導入完成！成功 ${stats.final_success_count} 張`;
-        
-        const extras = [];
-        if (stats.db_duplicate_count > 0) {
-          extras.push(`重複 ${stats.db_duplicate_count}`);
+        const stats = response.data.data || {};
+        const total = stats.total ?? 0;
+        const imported = stats.imported ?? 0;
+        const failed = stats.failed ?? 0;
+
+        let simpleMessage = `✅ 名片王匯入完成！成功 ${imported} / ${total} 張`;
+        if (failed > 0) {
+          simpleMessage += `，失敗 ${failed} 張`;
         }
-        if (stats.db_problem_count > 0) {
-          extras.push(`問題 ${stats.db_problem_count}`);
-        }
-        if (stats.db_error_count > 0) {
-          extras.push(`失敗 ${stats.db_error_count}`);
-        }
-        
-        if (extras.length > 0) {
-          simpleMessage += `，${extras.join('，')} 張`;
-        }
-        
-        console.log('文本導入統計詳情:', stats);
-        
+
+        console.log('名片王匯入統計詳情:', stats);
+
         Toast.show({
           content: simpleMessage,
           position: 'center',
           duration: 3000,
         });
-        
+
+        // 關閉上傳視窗 & 清空檔案
         setUploadModalVisible(false);
         setUploadFile(null);
-        loadCards(); // 重新載入名片列表
-        loadGlobalStats(); // 更新全局統計
+
+        // 重新載入列表與全局統計
+        loadCards();
+        loadGlobalStats();
       } else {
         Toast.show({
-          content: response.data?.message || '導入失敗',
+          content: response.data?.message || '名片王匯入失敗',
           position: 'center',
         });
       }
     } catch (error) {
-      console.error('文本導入失敗:', error);
+      console.error('名片王匯入失敗:', error);
       Toast.show({
-        content: error.response?.data?.message || '導入失敗',
+        content: error.response?.data?.message || '名片王匯入失敗',
         position: 'center',
       });
     } finally {
@@ -1305,7 +1290,7 @@ const CardManagerPage = () => {
                 style={{ flex: 1 }}
                 onClick={() => document.getElementById('file-input').click()}
               >
-                <UploadOutline /> 文本導入
+                <UploadOutline /> 名片王匯入
               </Button>
             </Space>
             
@@ -1313,7 +1298,7 @@ const CardManagerPage = () => {
             <input
               id="file-input"
               type="file"
-              accept=".xlsx,.xls,.csv"
+              accept=".wcxf"
               style={{ display: 'none' }}
               onChange={handleFileSelect}
             />
@@ -1462,7 +1447,7 @@ const CardManagerPage = () => {
         {/* 文本導入確認對話框 */}
         <Modal
           visible={uploadModalVisible}
-          title="文本導入確認"
+          title="名片王匯入確認"
           onClose={() => {
             setUploadModalVisible(false);
             setUploadFile(null);

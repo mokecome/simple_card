@@ -1,4 +1,5 @@
 from backend.models.card import CardORM, Card
+from backend.utils.serialization import serialize_datetime_fields
 from sqlalchemy.orm import Session
 from typing import Dict, Iterator, List, Optional, Tuple
 from sqlalchemy import and_, or_, func
@@ -142,29 +143,17 @@ def get_card(db: Session, card_id: int) -> dict:
         return None
 
     card_dict = Card.model_validate(card).model_dump()
-    if card_dict.get('created_at'):
-        card_dict['created_at'] = card_dict['created_at'].isoformat()
-    if card_dict.get('updated_at'):
-        card_dict['updated_at'] = card_dict['updated_at'].isoformat()
-    if card_dict.get('classified_at'):
-        card_dict['classified_at'] = card_dict['classified_at'].isoformat()
-
-    return card_dict
+    return serialize_datetime_fields(card_dict)
 
 def create_card(db: Session, card: Card) -> dict:
     db_card = CardORM(**card.model_dump(exclude_unset=True))
     db.add(db_card)
     db.commit()
     db.refresh(db_card)
-    
+
     # 轉換為字典格式，處理datetime序列化
     card_dict = Card.model_validate(db_card).model_dump()
-    if card_dict.get('created_at'):
-        card_dict['created_at'] = card_dict['created_at'].isoformat()
-    if card_dict.get('updated_at'):
-        card_dict['updated_at'] = card_dict['updated_at'].isoformat()
-    
-    return card_dict
+    return serialize_datetime_fields(card_dict)
 
 def update_card(db: Session, card_id: int, card: Card) -> dict:
     db_card = db.query(CardORM).filter(CardORM.id == card_id).first()
@@ -182,15 +171,10 @@ def update_card(db: Session, card_id: int, card: Card) -> dict:
     try:
         db.commit()
         db.refresh(db_card)
-        
+
         # 轉換為字典格式，處理datetime序列化
         card_dict = Card.model_validate(db_card).model_dump()
-        if card_dict.get('created_at'):
-            card_dict['created_at'] = card_dict['created_at'].isoformat()
-        if card_dict.get('updated_at'):
-            card_dict['updated_at'] = card_dict['updated_at'].isoformat()
-        
-        return card_dict
+        return serialize_datetime_fields(card_dict)
     except Exception as e:
         db.rollback()
         print(f"更新名片錯誤: {e}")

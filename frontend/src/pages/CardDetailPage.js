@@ -27,6 +27,7 @@ import {
 } from 'antd-mobile-icons';
 import { Image, ImageViewer } from 'antd-mobile';
 import axios from 'axios';
+import { getImageUrl } from '../utils/imageHelpers';
 
 const CardDetailPage = () => {
   const { id } = useParams();
@@ -279,21 +280,6 @@ const CardDetailPage = () => {
     } finally {
       setClassifying(false);
     }
-  };
-
-  // 圖片路徑轉換為可訪問的URL
-  const getImageUrl = (imagePath) => {
-    if (!imagePath) return null;
-
-    // 處理 card_data/ 路徑
-    if (imagePath.startsWith('card_data/')) {
-      return `/static/${imagePath}`;
-    }
-    // 處理 output/card_images/ 路徑
-    if (imagePath.startsWith('output/card_images/')) {
-      return `/static/uploads/${imagePath.replace('output/card_images/', '')}`;
-    }
-    return imagePath;
   };
 
   // 格式化日期
