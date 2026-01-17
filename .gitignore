@@ -69,4 +69,4 @@ htmlcov/
 # Excel和数据文件
 *.xlsx
 *.xls
-業務行銷客戶資料池.xlsx
+業務行銷客戶資料池.xlsx.env.local

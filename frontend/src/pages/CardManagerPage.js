@@ -32,7 +32,6 @@ import {
 } from 'antd-mobile-icons';
 import { Image, ImageViewer } from 'antd-mobile';
 import axios from 'axios';
-import { getImageUrl } from '../utils/imageHelpers';
 
 const CardManagerPage = () => {
   const navigate = useNavigate(); 
@@ -40,6 +39,12 @@ const CardManagerPage = () => {
   const [loading, setLoading] = useState(false);
   const [searchText, setSearchText] = useState('');
   const [filteredCards, setFilteredCards] = useState([]);
+
+  // ⬇ 新增：目前這組「search + 產業 + 狀態」條件下，後端告訴你的總筆數
+  const [filteredTotal, setFilteredTotal] = useState(0);
+  // ⬇ 新增：本次條件（search + 全部產業 + status）下的各產業分布統計
+  const [filteredIndustryStats, setFilteredIndustryStats] = useState({});
+
   const [uploadModalVisible, setUploadModalVisible] = useState(false);
   const [uploadFile, setUploadFile] = useState(null);
   const [uploadLoading, setUploadLoading] = useState(false);
@@ -79,6 +84,67 @@ const CardManagerPage = () => {
     hasEmail: null,
     hasAddress: null
   });
+
+  // 12 大類固定顯示順序（後端原始分類名稱）
+  const INDUSTRY_ORDER = [
+    "資訊科技",
+    "金融保險",
+    "製造業／工業應用",
+    "建築不動產",
+    "交通運輸／物流",
+    "醫療健康／生技",
+    "餐飲／零售／通路",
+    "廣告／媒體／行銷",
+    "教育／學研",
+    "政府／公部門／非營利",
+    "專業服務（顧問／法務／會計等）",
+    "不明／其他",
+  ];
+
+  // 後端分類名稱 → 前端顯示（你 Selector 的縮寫）
+  const INDUSTRY_DISPLAY_NAME = {
+    "資訊科技": "資訊科技",
+    "金融保險": "金融保險",
+    "製造業／工業應用": "製造業",
+    "建築不動產": "建築不動產",
+    "交通運輸／物流": "交通運輸",
+    "醫療健康／生技": "醫療生技",
+    "餐飲／零售／通路": "餐飲零售",
+    "廣告／媒體／行銷": "行銷媒體",
+    "教育／學研": "教育研究",
+    "政府／公部門／非營利": "公部門組織",
+    "專業服務（顧問／法務／會計等）": "專業服務",
+    "不明／其他": "其他",
+  };
+
+  // 把 breakdown 依固定順序輸出 + 套用顯示名稱
+  const formatIndustryBreakdown = (stats) => {
+    if (!stats || Object.keys(stats).length === 0) return "";
+    return INDUSTRY_ORDER
+      .map((key) => {
+        const count = stats[key];
+        if (!count || count <= 0) return null; // 0 就不顯示
+        const label = INDUSTRY_DISPLAY_NAME[key] || key;
+        return `${label}：${count} 張`;
+      })
+      .filter(Boolean)
+      .join("； ");
+  };
+
+  // 圖片路徑轉換為可訪問的URL
+  const getImageUrl = (imagePath) => {
+    if (!imagePath) return null;
+
+    // 處理 card_data/ 路徑
+    if (imagePath.startsWith('card_data/')) {
+      return `/static/${imagePath}`;
+    }
+    // 處理 output/card_images/ 路徑
+    if (imagePath.startsWith('output/card_images/')) {
+      return `/static/uploads/${imagePath.replace('output/card_images/', '')}`;
+    }
+    return imagePath;
+  };
 
   // 關鍵詞高亮組件
   const HighlightText = ({ text, keyword }) => {
@@ -316,12 +382,19 @@ const CardManagerPage = () => {
           skip: currentPageToLoad * pageSize,
           limit: pageSize,
           search: searchText || undefined,
-          industry: industryFilter && industryFilter !== '全部' ? industryFilter : undefined // 產業篩選
+          industry: industryFilter && industryFilter !== '全部' ? industryFilter : undefined, // 產業篩選
+          status: filterStatus !== 'all' ? filterStatus : undefined
         }
       });
       
       if (response.data && response.data.success && response.data.data) {
-        const { items, total, has_more } = response.data.data;
+        const { items, total, has_more, industry_stats, industry_breakdown } = response.data.data;
+
+        // ⬇ 新增：更新本次條件下的產業分布
+        setFilteredIndustryStats(industry_stats || industry_breakdown || {});
+
+        // ⬇ 新增：不管是不是載更多，都更新「符合條件的總筆數」
+        setFilteredTotal(total || 0);
         
         if (isLoadMore) {
           setCards(prev => [...prev, ...items]);
@@ -433,25 +506,13 @@ const CardManagerPage = () => {
     }, 300); // 防抖300ms
 
     return () => clearTimeout(timeoutId);
-  }, [searchText, industryFilter]);
+  }, [searchText, industryFilter, filterStatus]);
 
-  // 客戶端篩選（狀態篩選和高級篩選）
+  // 客戶端只做「高級篩選」，狀態交給後端
   useEffect(() => {
-    let filtered = cards;
-
-    // 狀態篩選
-    if (filterStatus !== 'all') {
-      filtered = filtered.filter(card => {
-        const cardStatus = checkCardStatus(card);
-        return cardStatus.status === filterStatus;
-      });
-    }
-
-    // 高級篩選
-    filtered = applyAdvancedFilters(filtered);
-
+    let filtered = applyAdvancedFilters(cards);
     setFilteredCards(filtered);
-  }, [cards, filterStatus, advancedFilters]);
+  }, [cards, advancedFilters]);
 
   // 刪除名片
   const handleDeleteCard = async (cardId) => {
@@ -581,6 +642,99 @@ const CardManagerPage = () => {
     // 清空input值，允許重複選擇同一個文件
     event.target.value = '';
   };
+
+  /*
+  // 執行文本導入
+  const handleTextImport = async () => {
+    if (!uploadFile) {
+      Toast.show({
+        content: '請先選擇文件',
+        position: 'center',
+      });
+      return;
+    }
+
+    setUploadLoading(true);
+    setUploadProgress(0);
+    try {
+      const formData = new FormData();
+      formData.append('file', uploadFile);
+
+      // 模擬進度更新
+      const progressInterval = setInterval(() => {
+        setUploadProgress(prev => {
+          if (prev >= 90) {
+            clearInterval(progressInterval);
+            return 90;
+          }
+          return prev + 10;
+        });
+      }, 500);
+
+      const response = await axios.post('/api/v1/cards/text-import', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+        onUploadProgress: (progressEvent) => {
+          const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+          setUploadProgress(percentCompleted * 0.5); // 上傳佔50%
+        },
+      });
+      
+      clearInterval(progressInterval);
+      setUploadProgress(100);
+
+      if (response.data && response.data.success) {
+        const stats = response.data.data;
+        
+        // 構建簡化的統計信息顯示
+        let simpleMessage = `✅ 導入完成！成功 ${stats.final_success_count} 張`;
+        
+        const extras = [];
+        if (stats.db_duplicate_count > 0) {
+          extras.push(`重複 ${stats.db_duplicate_count}`);
+        }
+        if (stats.db_problem_count > 0) {
+          extras.push(`問題 ${stats.db_problem_count}`);
+        }
+        if (stats.db_error_count > 0) {
+          extras.push(`失敗 ${stats.db_error_count}`);
+        }
+        
+        if (extras.length > 0) {
+          simpleMessage += `，${extras.join('，')} 張`;
+        }
+        
+        console.log('文本導入統計詳情:', stats);
+        
+        Toast.show({
+          content: simpleMessage,
+          position: 'center',
+          duration: 3000,
+        });
+        
+        setUploadModalVisible(false);
+        setUploadFile(null);
+        loadCards(); // 重新載入名片列表
+        loadGlobalStats(); // 更新全局統計
+      } else {
+        Toast.show({
+          content: response.data?.message || '導入失敗',
+          position: 'center',
+        });
+      }
+    } catch (error) {
+      console.error('文本導入失敗:', error);
+      Toast.show({
+        content: error.response?.data?.message || '導入失敗',
+        position: 'center',
+      });
+    } finally {
+      setUploadLoading(false);
+      setUploadProgress(0);
+    }
+  };
+  */
 
   // 執行名片王匯入（WCXF）
   const handleTextImport = async () => {
@@ -877,17 +1031,25 @@ const CardManagerPage = () => {
             <div style={{ marginTop: '8px' }}>
               <Tag
                 color={
-                  card.industry_category === '防詐' ? 'warning' :
-                  card.industry_category === '旅宿' ? 'success' :
-                  card.industry_category === '工業應用' ? 'primary' :
-                  card.industry_category === '食品業' ? 'default' :
+                  card.industry_category === '資訊科技' ? 'primary' :
+                  card.industry_category === '金融保險' ? 'warning' :
+                  card.industry_category === '製造業／工業應用' ? 'success' :
+                  card.industry_category === '建築不動產' ? 'default' :
+                  card.industry_category === '交通運輸／物流' ? 'primary' :
+                  card.industry_category === '醫療健康／生技' ? 'success' :
+                  card.industry_category === '餐飲／零售／通路' ? 'warning' :
+                  card.industry_category === '廣告／媒體／行銷' ? 'primary' :
+                  card.industry_category === '教育／學研' ? 'default' :
+                  card.industry_category === '政府／公部門／非營利' ? 'success' :
+                  card.industry_category === '專業服務（顧問／法務／會計等）' ? 'warning' :
+                  card.industry_category === '不明／其他' ? 'default' :
                   'default'
                 }
                 style={{ fontSize: '12px' }}
               >
                 🏢 {card.industry_category}
-                {card.classification_confidence &&
-                  ` (${Math.round(card.classification_confidence)}%)`
+                {typeof card.classification_confidence === 'number' &&
+                  ` (${Math.round(card.classification_confidence * 100)}%)`
                 }
               </Tag>
             </div>
@@ -1034,11 +1196,42 @@ const CardManagerPage = () => {
           <Selector
             options={[
               { label: '全部產業', value: '全部' },
-              { label: '防詐', value: '防詐' },
-              { label: '旅宿', value: '旅宿' },
-              { label: '工業應用', value: '工業應用' },
-              { label: '食品業', value: '食品業' },
-              { label: '其他', value: '其他' },
+
+              // 1. 資訊相關
+              { label: '資訊科技', value: '資訊科技' },
+
+              // 2. 金融相關
+              { label: '金融保險', value: '金融保險' },
+
+              // 3. 製造業／工業應用
+              { label: '製造業', value: '製造業／工業應用' },
+
+              // 4. 建築不動產
+              { label: '建築不動產', value: '建築不動產' },
+
+              // 5. 交通運輸／物流
+              { label: '交通運輸', value: '交通運輸／物流' },
+
+              // 6. 醫療健康／生技
+              { label: '醫療生技', value: '醫療健康／生技' },
+
+              // 7. 餐飲／零售／通路
+              { label: '餐飲零售', value: '餐飲／零售／通路' },
+
+              // 8. 廣告／媒體／行銷
+              { label: '行銷媒體', value: '廣告／媒體／行銷' },
+
+              // 9. 教育／學研
+              { label: '教育研究', value: '教育／學研' },
+
+              // 10. 政府／公部門／非營利
+              { label: '公部門組織', value: '政府／公部門／非營利' },
+
+              // 11. 專業服務
+              { label: '專業服務', value: '專業服務（顧問／法務／會計等）' },
+
+              // 12. 不明 / 其他
+              { label: '其他', value: '不明／其他' },
             ]}
             value={[industryFilter]}
             onChange={(arr) => setIndustryFilter(arr[0] || '全部')}
@@ -1391,20 +1584,34 @@ const CardManagerPage = () => {
                     <span>
                       {searchText && `'${searchText}' `}
                       {industryFilter !== '全部' ? (
-                        // 特定產業：如果有篩選條件則顯示篩選後數量，否則顯示總數
                         `📊 ${industryFilter}: ${
-                          searchText || Object.values(advancedFilters).some(v => v) || filterStatus !== 'all'
-                            ? filteredCards.length  // 有篩選條件：顯示篩選結果
-                            : (globalStats.industry_stats?.[industryFilter] || 0)  // 無篩選：顯示總數
+                          // ① 有高級篩選 → 前端自己過濾，顯示目前顯示中的數量
+                          Object.values(advancedFilters).some(v => v)
+                            ? filteredCards.length
+                            // ② 沒有高級篩選，但有 search 或 狀態篩選 → 用後端回傳的 total
+                            : (searchText || filterStatus !== 'all'
+                                ? filteredTotal
+                                // ③ 完全沒額外條件 → 顯示全局的產業統計
+                                : (globalStats.industry_stats?.[industryFilter] || 0))
                         } 張`
                       ) : (
-                        // 全部產業：顯示各產業統計
-                        globalStats.industry_stats && Object.keys(globalStats.industry_stats).length > 0 ? (
-                          `📊 ${Object.entries(globalStats.industry_stats)
-                            .sort(([,a], [,b]) => b - a)
-                            .map(([cat, count]) => `${cat}: ${count}`)
-                            .join(' | ')}`
-                        ) : '📊 載入中...'
+                        // ✅ 全部產業：如果有 search / status 篩選 → 顯示總數；否則顯示各產業統計
+                        (Object.values(advancedFilters).some(v => v) || searchText || filterStatus !== 'all') ? (
+                          (() => {
+                            const totalText = `📊 全部產業：${Object.values(advancedFilters).some(v => v) ? filteredCards.length : filteredTotal} 張`;
+
+                            const breakdown = formatIndustryBreakdown(filteredIndustryStats);
+
+                            return breakdown ? `${totalText}； ${breakdown}` : totalText;
+                          })()
+                        ) : (
+                          globalStats.industry_stats && Object.keys(globalStats.industry_stats).length > 0 ? (
+                            `📊 ${Object.entries(globalStats.industry_stats)
+                              .sort(([,a], [,b]) => b - a)
+                              .map(([cat, count]) => `${cat}: ${count}`)
+                              .join(' | ')}`
+                          ) : '📊 載入中...'
+                        )
                       )}
                     </span>
                     <span style={{ fontSize: '12px', color: '#999' }}>

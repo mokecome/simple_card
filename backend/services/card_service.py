@@ -1,5 +1,4 @@
 from backend.models.card import CardORM, Card
-from backend.utils.serialization import serialize_datetime_fields
 from sqlalchemy.orm import Session
 from typing import Dict, Iterator, List, Optional, Tuple
 from sqlalchemy import and_, or_, func
@@ -110,9 +109,72 @@ def get_cards_paginated(
             CardORM.position1_en.contains(search),
             # 聯絡資訊搜索
             CardORM.mobile_phone.contains(search),
-            CardORM.email.contains(search)
+            CardORM.email.contains(search),
+            # 🔍 產業標籤搜尋（primary_label + labels 都在這欄）
+            CardORM.classification_reason.contains(search),
         )
         query = query.filter(search_filter)
+
+    # 狀態過濾（normal / problem）
+    if filter_status in ("normal", "problem"):
+        # 定義「欄位是空的」的判斷（NULL 或 空字串）
+        def is_empty(col):
+            return or_(col.is_(None), col == "")
+
+        # 姓名缺失（中 + 英 都空）
+        name_missing = and_(
+            is_empty(CardORM.name_zh),
+            is_empty(CardORM.name_en),
+        )
+
+        # 公司缺失（中 + 英 都空）
+        company_missing = and_(
+            is_empty(CardORM.company_name_zh),
+            is_empty(CardORM.company_name_en),
+        )
+
+        # 職位全空
+        position_missing = and_(
+            is_empty(CardORM.position_zh),
+            is_empty(CardORM.position_en),
+            is_empty(CardORM.position1_zh),
+            is_empty(CardORM.position1_en),
+        )
+
+        # 部門全空
+        department_missing = and_(
+            is_empty(CardORM.department1_zh),
+            is_empty(CardORM.department1_en),
+            is_empty(CardORM.department2_zh),
+            is_empty(CardORM.department2_en),
+            is_empty(CardORM.department3_zh),
+            is_empty(CardORM.department3_en),
+        )
+
+        # 職位 & 部門都沒有 → 視為缺「職位或部門」
+        position_or_dept_missing = and_(position_missing, department_missing)
+
+        # 聯絡方式缺失（手機、電話1/2、Email、Line 全空）
+        contact_missing = and_(
+            is_empty(CardORM.mobile_phone),
+            is_empty(CardORM.company_phone1),
+            is_empty(CardORM.company_phone2),
+            is_empty(CardORM.email),
+            is_empty(CardORM.line_id),
+        )
+
+        # 「有問題」的判斷：有任一類缺失即可
+        problem_condition = or_(
+            name_missing,
+            company_missing,
+            position_or_dept_missing,
+            contact_missing,
+        )
+
+        if filter_status == "problem":
+            query = query.filter(problem_condition)
+        elif filter_status == "normal":
+            query = query.filter(~problem_condition)
     
     # 獲取總數
     total = query.count()
@@ -137,23 +199,109 @@ def get_cards_paginated(
 
     return result, total
 
+def get_industry_breakdown(
+    db: Session,
+    search: Optional[str] = None,
+    filter_status: Optional[str] = None,
+) -> Dict[str, int]:
+    """
+    在目前條件（search + status）下，各 industry_category 的數量
+    """
+    query = db.query(
+        CardORM.industry_category,
+        func.count(CardORM.id)
+    )
+
+    # 搜尋條件（跟 get_cards_paginated 一致）
+    if search:
+        search_filter = or_(
+            CardORM.name_zh.contains(search),
+            CardORM.name_en.contains(search),
+            CardORM.company_name_zh.contains(search),
+            CardORM.company_name_en.contains(search),
+            CardORM.position_zh.contains(search),
+            CardORM.position_en.contains(search),
+            CardORM.position1_zh.contains(search),
+            CardORM.position1_en.contains(search),
+            CardORM.mobile_phone.contains(search),
+            CardORM.email.contains(search),
+            CardORM.classification_reason.contains(search),
+        )
+        query = query.filter(search_filter)
+
+    # 狀態條件（跟 get_cards_paginated 一致）
+    if filter_status in ("normal", "problem"):
+        def is_empty(col):
+            return or_(col.is_(None), col == "")
+
+        name_missing = and_(is_empty(CardORM.name_zh), is_empty(CardORM.name_en))
+        company_missing = and_(is_empty(CardORM.company_name_zh), is_empty(CardORM.company_name_en))
+
+        position_missing = and_(
+            is_empty(CardORM.position_zh), is_empty(CardORM.position_en),
+            is_empty(CardORM.position1_zh), is_empty(CardORM.position1_en),
+        )
+        department_missing = and_(
+            is_empty(CardORM.department1_zh), is_empty(CardORM.department1_en),
+            is_empty(CardORM.department2_zh), is_empty(CardORM.department2_en),
+            is_empty(CardORM.department3_zh), is_empty(CardORM.department3_en),
+        )
+        position_or_dept_missing = and_(position_missing, department_missing)
+
+        contact_missing = and_(
+            is_empty(CardORM.mobile_phone),
+            is_empty(CardORM.company_phone1),
+            is_empty(CardORM.company_phone2),
+            is_empty(CardORM.email),
+            is_empty(CardORM.line_id),
+        )
+
+        problem_condition = or_(name_missing, company_missing, position_or_dept_missing, contact_missing)
+
+        if filter_status == "problem":
+            query = query.filter(problem_condition)
+        else:
+            query = query.filter(~problem_condition)
+
+    query = query.group_by(CardORM.industry_category)
+    rows = query.all()
+
+    breakdown: Dict[str, int] = {}
+    for cat, cnt in rows:
+        key = (cat or "未分類")
+        breakdown[key] = int(cnt)
+
+    return breakdown
+
 def get_card(db: Session, card_id: int) -> dict:
     card = db.query(CardORM).filter(CardORM.id == card_id).first()
     if not card:
         return None
 
     card_dict = Card.model_validate(card).model_dump()
-    return serialize_datetime_fields(card_dict)
+    if card_dict.get('created_at'):
+        card_dict['created_at'] = card_dict['created_at'].isoformat()
+    if card_dict.get('updated_at'):
+        card_dict['updated_at'] = card_dict['updated_at'].isoformat()
+    if card_dict.get('classified_at'):
+        card_dict['classified_at'] = card_dict['classified_at'].isoformat()
+
+    return card_dict
 
 def create_card(db: Session, card: Card) -> dict:
     db_card = CardORM(**card.model_dump(exclude_unset=True))
     db.add(db_card)
     db.commit()
     db.refresh(db_card)
-
+    
     # 轉換為字典格式，處理datetime序列化
     card_dict = Card.model_validate(db_card).model_dump()
-    return serialize_datetime_fields(card_dict)
+    if card_dict.get('created_at'):
+        card_dict['created_at'] = card_dict['created_at'].isoformat()
+    if card_dict.get('updated_at'):
+        card_dict['updated_at'] = card_dict['updated_at'].isoformat()
+    
+    return card_dict
 
 def update_card(db: Session, card_id: int, card: Card) -> dict:
     db_card = db.query(CardORM).filter(CardORM.id == card_id).first()
@@ -171,10 +319,15 @@ def update_card(db: Session, card_id: int, card: Card) -> dict:
     try:
         db.commit()
         db.refresh(db_card)
-
+        
         # 轉換為字典格式，處理datetime序列化
         card_dict = Card.model_validate(db_card).model_dump()
-        return serialize_datetime_fields(card_dict)
+        if card_dict.get('created_at'):
+            card_dict['created_at'] = card_dict['created_at'].isoformat()
+        if card_dict.get('updated_at'):
+            card_dict['updated_at'] = card_dict['updated_at'].isoformat()
+        
+        return card_dict
     except Exception as e:
         db.rollback()
         print(f"更新名片錯誤: {e}")
@@ -250,7 +403,9 @@ def get_cards_count(db: Session, search: Optional[str] = None) -> int:
             CardORM.position1_en.contains(search),
             # 聯絡資訊搜索
             CardORM.mobile_phone.contains(search),
-            CardORM.email.contains(search)
+            CardORM.email.contains(search),
+            # 產業標籤搜尋
+            CardORM.classification_reason.contains(search),
         )
         query = query.filter(search_filter)
     

@@ -11,6 +11,7 @@ from backend.services.card_service import (
     get_cards_paginated,
     get_cards_count,
     iterate_cards_for_stats,
+    get_industry_breakdown,
 )
 from backend.services.industry_classification_service import IndustryClassificationService
 from backend.services.ocr_service import OCRService
@@ -55,6 +56,12 @@ def invalidate_card_stats_cache() -> None:
     """清除名片統計快取"""
     cache.delete(STATS_CACHE_KEY)
 
+def is_all_industry(industry: Optional[str]) -> bool:
+    if industry is None:
+        return True
+    s = str(industry).strip()
+    return s == "" or s in ("全部", "全部產業", "all", "ALL")
+
 # 創建圖片存儲目錄
 UPLOAD_DIR = "output/card_images"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -65,20 +72,29 @@ def list_cards(
     limit: int = Query(100, ge=1, le=1000, description="每頁記錄數"),
     search: Optional[str] = Query(None, description="搜索關鍵詞"),
     industry: Optional[str] = Query(None, description="产业分类过滤"),
+    status: Optional[str] = Query("all", description="狀態篩選: all / normal / problem"),
     use_pagination: bool = Query(False, description="是否使用分頁"),
     db: Session = Depends(get_db)
 ):
     try:
         if use_pagination:
             # 使用分頁查詢（支持产业过滤）
-            cards, total = get_cards_paginated(db, skip=skip, limit=limit, search=search, industry=industry)
+            cards, total = get_cards_paginated(db, skip=skip, limit=limit, search=search, industry=industry, filter_status=status)
+            industry_breakdown = None
+            if is_all_industry(industry):
+                industry_breakdown = get_industry_breakdown(
+                    db,
+                    search=search,
+                    filter_status=status,
+                )
             return ResponseHandler.success(
                 data={
                     "items": cards,
                     "total": total,
                     "skip": skip,
                     "limit": limit,
-                    "has_more": (skip + len(cards)) < total
+                    "has_more": (skip + len(cards)) < total,
+                    "industry_breakdown": industry_breakdown
                 },
                 message="獲取名片列表成功"
             )
