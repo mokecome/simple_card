@@ -65,6 +65,9 @@ htmlcov/
 !frontend/package-lock.json
 !tsconfig.json
 !.vscode/*.json
+!ace-spider/**/*.html
+!ace-spider/**/*.json
+!ace-spider/**/*.yaml
 
 # Excel和数据文件
 *.xlsx

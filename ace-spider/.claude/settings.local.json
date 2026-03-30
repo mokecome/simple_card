@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -r \"uvicorn\\\\|flask\\\\|port\" /data1/165/ocr_v2/ace-spider/*.py)",
+      "Bash(grep:*)",
+      "Bash(python3 -c \"import fastapi; print\\(fastapi.__version__\\)\")",
+      "Bash(nginx -v)",
+      "Bash(systemctl is-active:*)",
+      "Read(//etc/nginx/sites-enabled/**)",
+      "Read(//etc/nginx/conf.d/**)"
+    ]
+  }
+}

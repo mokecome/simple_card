@@ -10,7 +10,7 @@ from backend.api.v1 import card, ocr
 from backend.core.config import *
 from backend.core.middleware import ErrorHandlingMiddleware, LoggingMiddleware
 
-_spider_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'ace-spider')
+_spider_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ace-spider')
 if _spider_dir not in sys.path:
     sys.path.append(_spider_dir)
 from dashboard_api import app as spider_app

@@ -1,0 +1,767 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ace-Spider Dashboard</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: 'Inter', -apple-system, sans-serif; background: #0f172a; color: #e2e8f0; }
+  .sidebar { background: #1e293b; }
+  .card { background: #1e293b; border: 1px solid #334155; border-radius: 12px; }
+  .card-highlight { background: linear-gradient(135deg, #1e293b 0%, #1a2332 100%); border-color: #475569; }
+  .badge { display: inline-block; padding: 2px 10px; border-radius: 9999px; font-size: 12px; font-weight: 600; }
+  .badge-high { background: #dc262620; color: #fca5a5; border: 1px solid #dc262640; }
+  .badge-medium { background: #f59e0b20; color: #fcd34d; border: 1px solid #f59e0b40; }
+  .badge-low { background: #64748b20; color: #94a3b8; border: 1px solid #64748b40; }
+  .badge-bu1 { background: #3b82f620; color: #93c5fd; border: 1px solid #3b82f640; }
+  .badge-bu2 { background: #f9731620; color: #fdba74; border: 1px solid #f9731640; }
+  .badge-both { background: #8b5cf620; color: #c4b5fd; border: 1px solid #8b5cf640; }
+  .badge-none { background: #47556920; color: #94a3b8; border: 1px solid #47556940; }
+  table { width: 100%; border-collapse: separate; border-spacing: 0; }
+  th { background: #334155; color: #cbd5e1; font-weight: 600; text-transform: uppercase; font-size: 11px; letter-spacing: 0.05em; padding: 10px 12px; text-align: left; position: sticky; top: 0; z-index: 1; }
+  td { padding: 10px 12px; border-bottom: 1px solid #1e293b; font-size: 13px; }
+  tr:hover td { background: #1e293b80; }
+  .stage-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+  .stage-dot.done { background: #22c55e; box-shadow: 0 0 6px #22c55e80; }
+  .stage-dot.empty { background: #475569; }
+  .nav-item { cursor: pointer; padding: 10px 16px; border-radius: 8px; transition: all 0.15s; display: flex; align-items: center; gap: 10px; }
+  .nav-item:hover { background: #334155; }
+  .nav-item.active { background: #3b82f620; color: #60a5fa; border-left: 3px solid #3b82f6; }
+  .search-input { background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 8px 12px; color: #e2e8f0; width: 100%; }
+  .search-input:focus { outline: none; border-color: #3b82f6; }
+  .tag { display: inline-block; padding: 1px 8px; margin: 1px; border-radius: 4px; font-size: 11px; background: #334155; color: #cbd5e1; }
+  .progress-bar { height: 6px; border-radius: 3px; background: #334155; overflow: hidden; }
+  .progress-fill { height: 100%; border-radius: 3px; transition: width 0.5s; }
+  .detail-modal { position: fixed; inset: 0; background: #00000080; z-index: 50; display: flex; align-items: center; justify-content: center; }
+  .detail-content { background: #1e293b; border: 1px solid #334155; border-radius: 16px; max-width: 800px; width: 90%; max-height: 85vh; overflow-y: auto; padding: 24px; }
+  .tab-btn { padding: 8px 20px; border-radius: 8px; font-size: 13px; cursor: pointer; transition: all 0.15s; border: 1px solid transparent; }
+  .tab-btn.active { background: #3b82f620; color: #60a5fa; border-color: #3b82f640; }
+  .tab-btn:not(.active) { color: #94a3b8; }
+  .tab-btn:not(.active):hover { color: #e2e8f0; background: #33415540; }
+  .stat-num { font-size: 28px; font-weight: 700; line-height: 1; }
+  .control-button { width: 100%; border-radius: 8px; padding: 9px 12px; font-size: 13px; font-weight: 600; transition: all 0.15s; }
+  .control-button.primary { background: #2563eb; color: #eff6ff; }
+  .control-button.primary:hover { background: #1d4ed8; }
+  .control-button.secondary { background: #0f172a; color: #cbd5e1; border: 1px solid #334155; }
+  .control-button.secondary:hover { border-color: #475569; background: #172033; }
+  .control-button.compact { width: auto; white-space: nowrap; }
+  .control-button:disabled { opacity: 0.55; cursor: not-allowed; }
+  .status-pill { display: inline-flex; align-items: center; gap: 6px; border-radius: 9999px; padding: 3px 8px; font-size: 11px; font-weight: 600; }
+  .status-pill.running { background: #16653430; color: #86efac; border: 1px solid #16653460; }
+  .status-pill.idle { background: #33415560; color: #cbd5e1; border: 1px solid #47556980; }
+  .control-section { border-radius: 14px; border: 1px solid #334155; background: linear-gradient(180deg, #1b2535 0%, #162031 100%); padding: 14px; }
+  .control-section-title { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 6px; }
+  .control-section-title h3 { font-size: 14px; font-weight: 700; color: #f8fafc; }
+  .control-section-copy { color: #94a3b8; font-size: 11px; line-height: 1.5; }
+  .mini-pill { display: inline-flex; align-items: center; border-radius: 9999px; padding: 3px 8px; font-size: 10px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }
+  .mini-pill.blue { color: #93c5fd; background: #1d4ed830; border: 1px solid #2563eb60; }
+  .schedule-panel { margin-top: 12px; border-radius: 12px; border: 1px solid #334155; background: #0f172a; padding: 12px; }
+  .schedule-kicker { color: #94a3b8; font-size: 11px; margin-bottom: 6px; }
+  .schedule-clock { font-size: 30px; line-height: 1; font-weight: 800; color: #f8fafc; letter-spacing: -0.05em; }
+  .schedule-subtext { color: #94a3b8; font-size: 11px; margin-top: 6px; }
+  .schedule-editor { margin-top: 12px; padding-top: 12px; border-top: 1px solid #334155; }
+  .schedule-label { display: block; color: #cbd5e1; font-size: 11px; font-weight: 600; margin-bottom: 8px; }
+  .schedule-field { display: flex; align-items: center; gap: 8px; border-radius: 10px; border: 1px solid #334155; background: #0f172a; padding: 6px; }
+  .schedule-field input { border: 0; background: transparent; padding: 6px 8px; min-height: 38px; }
+  .schedule-field input:focus { outline: none; }
+  .schedule-note { color: #94a3b8; font-size: 11px; line-height: 1.5; margin-top: 8px; }
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
+</style>
+</head>
+<body class="flex h-screen overflow-hidden">
+
+<!-- Sidebar -->
+<aside class="sidebar w-64 flex-shrink-0 flex flex-col p-4 border-r border-slate-700 overflow-y-auto">
+  <div class="mb-6">
+    <h1 class="text-lg font-bold text-white">Ace-Spider</h1>
+    <p class="text-xs text-slate-400 mt-1">Pipeline Dashboard</p>
+  </div>
+
+  <div class="text-xs text-slate-500 uppercase tracking-wider mb-2 px-2">Pipeline</div>
+  <nav id="nav" class="space-y-1 mb-6">
+    <div class="nav-item active" data-view="overview" onclick="switchView('overview')">
+      <span class="text-base">&#9679;</span> Overview
+    </div>
+    <div class="nav-item" data-view="crawl" onclick="switchView('crawl')">
+      <span class="stage-dot" id="dot-crawl"></span> 1. Crawl
+    </div>
+    <div class="nav-item" data-view="tagged" onclick="switchView('tagged')">
+      <span class="stage-dot" id="dot-tagged"></span> 2. AI Tags
+    </div>
+    <div class="nav-item" data-view="scored" onclick="switchView('scored')">
+      <span class="stage-dot" id="dot-scored"></span> 3. Scoring
+    </div>
+    <div class="nav-item" data-view="matched" onclick="switchView('matched')">
+      <span class="stage-dot" id="dot-matched"></span> 4. Matching
+    </div>
+  </nav>
+
+  <div class="text-xs text-slate-500 uppercase tracking-wider mb-2 px-2">Report</div>
+  <nav class="space-y-1">
+    <div class="nav-item" data-view="report" onclick="switchView('report')">
+      <span class="text-base">&#128202;</span> Final Report
+    </div>
+  </nav>
+
+  <div class="text-xs text-slate-500 uppercase tracking-wider mt-6 mb-2 px-2">Control</div>
+  <div class="card p-3 space-y-3 mb-4">
+    <div class="control-section">
+      <div class="control-section-title">
+        <h3>即時抓取</h3>
+        <span class="mini-pill blue">Run Now</span>
+      </div>
+      <div class="control-section-copy">立即觸發完整流程，適合手動補抓或更新最新招標資料。</div>
+      <button id="run-now-btn" class="control-button primary" onclick="runPipelineNow()">立即執行</button>
+    </div>
+
+    <div class="control-section">
+      <div class="control-section-title">
+        <h3>定時任務</h3>
+      </div>
+      <div class="control-section-copy">看目前時間，改好之後按「更新」就會生效。</div>
+
+      <div class="schedule-panel">
+        <div class="schedule-kicker">目前自動抓取時間</div>
+        <div id="schedule-summary-time" class="schedule-clock">09:00</div>
+        <div id="schedule-summary-days" class="schedule-subtext">每週一自動執行</div>
+      </div>
+
+      <div class="schedule-editor">
+        <label class="schedule-label" for="schedule-time">設定新的時間</label>
+        <div class="schedule-field">
+          <input id="schedule-time" type="time" class="search-input flex-1">
+          <button id="save-schedule-btn" class="control-button secondary compact" onclick="saveScheduleTime()">更新</button>
+        </div>
+        <div class="schedule-note" id="schedule-hint">選擇時間後，按右側「更新」。</div>
+      </div>
+    </div>
+
+    <div class="border-t border-slate-700 pt-3 text-xs">
+      <div class="flex items-center justify-between gap-2">
+        <span class="text-slate-400">任務狀態</span>
+        <span id="pipeline-status" class="status-pill idle">待命</span>
+      </div>
+      <div id="pipeline-meta" class="text-slate-500 mt-2 leading-5"></div>
+      <div id="control-message" class="text-slate-400 mt-2 min-h-[18px]"></div>
+    </div>
+  </div>
+
+  <div class="mt-auto pt-4 border-t border-slate-700 text-xs text-slate-500" id="run-info"></div>
+</aside>
+
+<!-- Main -->
+<main class="flex-1 overflow-y-auto p-6" id="main-content">
+  <div id="view-loading" class="flex items-center justify-center h-full">
+    <div class="text-slate-400">Loading...</div>
+  </div>
+</main>
+
+<!-- Detail Modal -->
+<div id="detail-modal" class="detail-modal hidden" onclick="if(event.target===this)closeDetail()">
+  <div class="detail-content" id="detail-body"></div>
+</div>
+
+<script>
+const API = new URLSearchParams(window.location.search).get('api_base') || '';
+let currentView = 'overview';
+let runState = null;
+let stageCache = {};
+let controlState = null;
+
+// ─── Helpers ───
+function fmt(n) {
+  if (n == null) return 'N/A';
+  if (n >= 1e8) return (n/1e8).toFixed(1) + ' 億';
+  if (n >= 1e4) return (n/1e4).toFixed(0) + ' 萬';
+  return n.toLocaleString();
+}
+
+function priBadge(p) {
+  const m = {high:'badge-high', medium:'badge-medium', low:'badge-low'};
+  const l = {high:'高', medium:'中', low:'低'};
+  return `<span class="badge ${m[p]||'badge-low'}">${l[p]||p}</span>`;
+}
+
+function buBadge(bu) {
+  const m = {BU1:'badge-bu1', BU2:'badge-bu2', both:'badge-both', none:'badge-none'};
+  return `<span class="badge ${m[bu]||'badge-none'}">${bu}</span>`;
+}
+
+function tags(arr) {
+  return (arr||[]).map(t => `<span class="tag">${t}</span>`).join('');
+}
+
+function fitBar(score) {
+  const color = score >= 60 ? '#22c55e' : score >= 40 ? '#f59e0b' : '#ef4444';
+  return `<div class="flex items-center gap-2">
+    <div class="progress-bar w-16"><div class="progress-fill" style="width:${score}%;background:${color}"></div></div>
+    <span class="text-xs">${score}</span>
+  </div>`;
+}
+
+async function fetchJSON(url) {
+  const r = await fetch(API + url);
+  if (!r.ok) throw new Error(r.statusText);
+  return r.json();
+}
+
+async function postJSON(url, body = {}) {
+  const r = await fetch(API + url, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(body),
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.detail || r.statusText);
+  return data;
+}
+
+function setControlMessage(message, tone = 'muted') {
+  const el = document.getElementById('control-message');
+  if (!el) return;
+  const colors = {
+    muted: 'text-slate-400',
+    success: 'text-green-400',
+    error: 'text-red-400',
+  };
+  el.className = `${colors[tone] || colors.muted} mt-2 min-h-[18px]`;
+  el.textContent = message || '';
+}
+
+function updateRunInfo() {
+  if (!runState) return;
+  document.getElementById('run-info').innerHTML = `
+    Run: ${runState.run_id || 'N/A'}<br>
+    ${runState.updated_at ? runState.updated_at.slice(0,16).replace('T',' ') : ''}
+  `;
+}
+
+function updateStageDots() {
+  if (!runState) return;
+  ['crawl','tagged','scored','matched'].forEach(s => {
+    const dot = document.getElementById('dot-' + s);
+    dot.classList.toggle('done', !!runState.stages[s]);
+    dot.classList.toggle('empty', !runState.stages[s]);
+  });
+}
+
+function describeCronDays(cronExpr) {
+  const day = (cronExpr || '').split(' ')[4] || '';
+  if (day === '1') return '每週一自動執行';
+  if (day === '1-5') return '每週一至週五自動執行';
+  if (day === '*') return '每日自動執行';
+  if (day === '0,6' || day === '6,0') return '每週末自動執行';
+  if (day) return `週期規則: ${day}`;
+  return '依目前排程規則自動執行';
+}
+
+function renderControlPanel() {
+  if (!controlState) return;
+
+  const statusEl = document.getElementById('pipeline-status');
+  const metaEl = document.getElementById('pipeline-meta');
+  const timeEl = document.getElementById('schedule-time');
+  const runBtn = document.getElementById('run-now-btn');
+  const summaryTimeEl = document.getElementById('schedule-summary-time');
+  const summaryDaysEl = document.getElementById('schedule-summary-days');
+
+  if (document.activeElement !== timeEl) {
+    timeEl.value = controlState.schedule_time || '09:00';
+  }
+  runBtn.disabled = !!controlState.running;
+
+  const statusText = controlState.running ? '執行中' : '待命';
+  const statusClass = `status-pill ${controlState.running ? 'running' : 'idle'}`;
+  statusEl.textContent = statusText;
+  statusEl.className = statusClass;
+
+  summaryTimeEl.textContent = controlState.schedule_time || '09:00';
+  summaryDaysEl.textContent = describeCronDays(controlState.schedule_cron);
+
+  const meta = [];
+  if (controlState.started_at) meta.push(`啟動: ${controlState.started_at.slice(0,16).replace('T',' ')}`);
+  if (controlState.pid) meta.push(`PID: ${controlState.pid}`);
+  if (controlState.schedule_cron) meta.push(`Cron: ${controlState.schedule_cron}`);
+  metaEl.innerHTML = meta.join('<br>') || '尚未啟動背景抓取。';
+}
+
+async function loadRunState(shouldRender = false) {
+  runState = await fetchJSON('/api/run-state');
+  updateStageDots();
+  updateRunInfo();
+  if (shouldRender) renderView(currentView);
+}
+
+async function loadControlState() {
+  const wasRunning = !!controlState?.running;
+  controlState = await fetchJSON('/api/control');
+  renderControlPanel();
+  if (wasRunning && !controlState.running) {
+    await loadRunState(true);
+    setControlMessage('抓取流程已完成，畫面資料已刷新。', 'success');
+  }
+}
+
+async function runPipelineNow() {
+  const btn = document.getElementById('run-now-btn');
+  btn.disabled = true;
+  setControlMessage('正在啟動抓取流程...');
+
+  try {
+    const data = await postJSON('/api/control/run-now');
+    controlState = data;
+    renderControlPanel();
+    setControlMessage(data.ok ? '已啟動 main.py 完整流程。' : (data.message || '已有任務執行中。'), data.ok ? 'success' : 'muted');
+  } catch (e) {
+    btn.disabled = false;
+    setControlMessage(`啟動失敗: ${e.message}`, 'error');
+  }
+}
+
+async function saveScheduleTime() {
+  const timeValue = document.getElementById('schedule-time').value;
+  if (!timeValue) {
+    setControlMessage('請先選擇時間。', 'error');
+    return;
+  }
+
+  setControlMessage('正在更新定時抓取時間...');
+  try {
+    const data = await postJSON('/api/control/schedule', {time: timeValue});
+    controlState = data;
+    renderControlPanel();
+    setControlMessage(`定時抓取已更新為 ${data.schedule_time}。`, 'success');
+  } catch (e) {
+    setControlMessage(`更新失敗: ${e.message}`, 'error');
+  }
+}
+
+// ─── Navigation ───
+function switchView(view) {
+  currentView = view;
+  document.querySelectorAll('.nav-item').forEach(el => {
+    el.classList.toggle('active', el.dataset.view === view);
+  });
+  renderView(view);
+}
+
+async function renderView(view) {
+  const main = document.getElementById('main-content');
+  main.innerHTML = '<div class="flex items-center justify-center h-32 text-slate-400">Loading...</div>';
+  try {
+    if (view === 'overview') await renderOverview(main);
+    else if (view === 'report') await renderReport(main);
+    else await renderStage(main, view);
+  } catch(e) {
+    main.innerHTML = `<div class="text-red-400 p-4">Error: ${e.message}</div>`;
+  }
+}
+
+// ─── Overview ───
+async function renderOverview(el) {
+  if (!runState) runState = await fetchJSON('/api/run-state');
+  const s = runState.stages;
+
+  el.innerHTML = `
+    <h2 class="text-xl font-bold mb-6">Pipeline Overview</h2>
+
+    <!-- Pipeline Flow -->
+    <div class="grid grid-cols-4 gap-4 mb-8">
+      ${['crawl','tagged','scored','matched'].map((stage, i) => {
+        const info = s[stage];
+        const labels = {crawl:'Crawl 爬取', tagged:'AI Tags 標籤', scored:'Scoring 評分', matched:'Matching 匹配'};
+        const done = !!info;
+        return `
+        <div class="card p-4 ${done ? 'card-highlight' : ''} cursor-pointer" onclick="switchView('${stage}')">
+          <div class="flex items-center gap-2 mb-3">
+            <span class="stage-dot ${done?'done':'empty'}"></span>
+            <span class="text-sm font-semibold">${i+1}. ${labels[stage]}</span>
+          </div>
+          ${done ? `
+            <div class="stat-num text-white">${info.count}</div>
+            <div class="text-xs text-slate-400 mt-1">筆標案</div>
+            ${info.passed_count != null ? `<div class="text-xs text-green-400 mt-2">${info.passed_count} 筆通過篩選</div>` : ''}
+            ${info.tagged_count != null ? `<div class="text-xs text-blue-400 mt-2">${info.tagged_count} 筆已標籤</div>` : ''}
+            ${info.with_contacts != null ? `<div class="text-xs text-purple-400 mt-2">${info.with_contacts} 筆有聯繫人</div>` : ''}
+          ` : '<div class="text-slate-500 text-sm mt-2">尚未執行</div>'}
+        </div>`;
+      }).join('')}
+    </div>
+
+    <!-- Quick Stats -->
+    ${s.scored ? `
+    <h3 class="text-lg font-semibold mb-4">Quick Stats</h3>
+    <div class="grid grid-cols-3 gap-4 mb-8">
+      <div class="card p-4">
+        <div class="text-xs text-slate-400 mb-1">平均 Fit Score</div>
+        <div class="stat-num text-blue-400">${s.scored.avg_fit}</div>
+      </div>
+      <div class="card p-4">
+        <div class="text-xs text-slate-400 mb-1">通過篩選率</div>
+        <div class="stat-num text-green-400">${(s.scored.passed_count / s.scored.count * 100).toFixed(0)}%</div>
+      </div>
+      <div class="card p-4">
+        <div class="text-xs text-slate-400 mb-1">有匹配聯繫人</div>
+        <div class="stat-num text-purple-400">${s.matched?.with_contacts || 0}</div>
+      </div>
+    </div>` : ''}
+
+    <div class="text-xs text-slate-500">
+      Run ID: ${runState.run_id || 'N/A'} &nbsp;|&nbsp; Updated: ${runState.updated_at ? runState.updated_at.slice(0,19).replace('T',' ') : 'N/A'}
+    </div>
+  `;
+}
+
+// ─── Stage View ───
+async function renderStage(el, stage) {
+  const data = await fetchJSON(`/api/stage/${stage}?page_size=200`);
+  const tenders = data.tenders;
+  const meta = data.meta;
+
+  const stageNames = {crawl:'Crawl 爬取結果', tagged:'AI 標籤分析', scored:'Fit/ROI 評分', matched:'CRM 匹配結果'};
+
+  let filterHTML = '';
+  if (stage === 'scored' || stage === 'matched') {
+    filterHTML = `<label class="flex items-center gap-2 text-sm text-slate-400">
+      <input type="checkbox" id="filter-passed" onchange="filterStage('${stage}')" class="accent-blue-500"> 只顯示通過篩選
+    </label>`;
+  }
+
+  el.innerHTML = `
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-xl font-bold">${stageNames[stage]}</h2>
+      <div class="flex items-center gap-4">
+        ${filterHTML}
+        <input class="search-input w-64" placeholder="搜尋標案名稱或機關..." id="stage-search" oninput="filterStage('${stage}')">
+      </div>
+    </div>
+
+    <!-- Meta -->
+    <div class="flex gap-4 mb-4 text-xs text-slate-400">
+      <span>共 <strong class="text-white">${data.total}</strong> 筆</span>
+      ${meta.crawl_time ? `<span>爬取: ${meta.crawl_time.slice(0,19).replace('T',' ')}</span>` : ''}
+      ${meta.keywords_used ? `<span>關鍵字: ${meta.keywords_used.join(', ')}</span>` : ''}
+      ${meta.total_tokens_used ? `<span>Tokens: ${meta.total_tokens_used.toLocaleString()}</span>` : ''}
+    </div>
+
+    <div class="card overflow-hidden">
+      <div class="overflow-x-auto max-h-[calc(100vh-200px)] overflow-y-auto">
+        <table id="stage-table">
+          <thead>${stageTableHeader(stage)}</thead>
+          <tbody>${stageTableRows(stage, tenders)}</tbody>
+        </table>
+      </div>
+    </div>
+  `;
+
+  // Cache for filtering
+  stageCache[stage] = tenders;
+}
+
+async function filterStage(stage) {
+  const search = document.getElementById('stage-search')?.value || '';
+  const passed = document.getElementById('filter-passed')?.checked || false;
+  const params = new URLSearchParams({page_size: 200});
+  if (search) params.set('search', search);
+  if (passed) params.set('filter_passed', 'true');
+  const data = await fetchJSON(`/api/stage/${stage}?${params}`);
+  const tbody = document.querySelector('#stage-table tbody');
+  tbody.innerHTML = stageTableRows(stage, data.tenders);
+}
+
+function stageTableHeader(stage) {
+  const cols = {
+    crawl: ['標案名稱','機關名稱','預算','招標方式','截止日期','類別'],
+    tagged: ['標案名稱','機關名稱','BU','技術標籤','產業標籤','客製化','人天','摘要'],
+    scored: ['標案名稱','機關名稱','Fit Score','ROI','優先級','BU','預算','通過'],
+    matched: ['標案名稱','機關名稱','Fit','優先級','BU','匹配聯繫人','分數'],
+  };
+  return '<tr>' + cols[stage].map(c => `<th>${c}</th>`).join('') + '</tr>';
+}
+
+function stageTableRows(stage, tenders) {
+  return tenders.map(t => {
+    const tag = t.tag_result || {};
+    const click = `onclick="showDetail('${t.tender_id}')" class="cursor-pointer"`;
+    switch(stage) {
+      case 'crawl': return `<tr ${click}>
+        <td class="max-w-xs truncate">${t.tender_name||'?'}</td>
+        <td>${t.org_name||''}</td>
+        <td class="text-right">${fmt(t.budget)}</td>
+        <td>${t.bid_method||''}</td>
+        <td>${t.deadline||''}</td>
+        <td class="text-xs">${t.category||''}</td>
+      </tr>`;
+      case 'tagged': return `<tr ${click}>
+        <td class="max-w-[200px] truncate">${t.tender_name||'?'}</td>
+        <td>${t.org_name||''}</td>
+        <td>${buBadge(tag.bu_assignment||'none')}</td>
+        <td>${tags(tag.tech_tags)}</td>
+        <td>${tags(tag.industry_tags)}</td>
+        <td><span class="tag">${tag.customization_level||''}</span></td>
+        <td class="text-center">${tag.estimated_effort_days||''}</td>
+        <td class="text-xs text-slate-400 max-w-[200px] truncate">${tag.relevance_summary||''}</td>
+      </tr>`;
+      case 'scored': return `<tr ${click}>
+        <td class="max-w-[200px] truncate">${t.tender_name||'?'}</td>
+        <td>${t.org_name||''}</td>
+        <td>${fitBar(t.fit_score||0)}</td>
+        <td class="text-center">${(t.roi_score||0).toFixed(1)}</td>
+        <td>${priBadge(t.priority)}</td>
+        <td>${buBadge((tag.bu_assignment)||'none')}</td>
+        <td class="text-right">${fmt(t.budget)}</td>
+        <td class="text-center">${t.passes_filter ? '<span class="text-green-400">&#10003;</span>' : '<span class="text-slate-600">&#10007;</span>'}</td>
+      </tr>`;
+      case 'matched':
+        const contacts = t.matched_contacts || [];
+        return `<tr ${click}>
+        <td class="max-w-[200px] truncate">${t.tender_name||'?'}</td>
+        <td>${t.org_name||''}</td>
+        <td>${fitBar(t.fit_score||0)}</td>
+        <td>${priBadge(t.priority)}</td>
+        <td>${buBadge((tag.bu_assignment)||'none')}</td>
+        <td class="text-xs">${contacts.slice(0,2).map(c => `${c.name} <span class="text-slate-500">(${c.company||''})</span>`).join('<br>')}</td>
+        <td class="text-center">${contacts.length ? contacts[0].match_score : '-'}</td>
+      </tr>`;
+    }
+  }).join('');
+}
+
+// ─── Report View ───
+async function renderReport(el) {
+  const r = await fetchJSON('/api/report');
+  const s = r.summary;
+
+  el.innerHTML = `
+    <div class="flex items-center justify-between mb-6">
+      <h2 class="text-xl font-bold">Final Report</h2>
+      <div class="text-xs text-slate-400">
+        爬取: ${(r.crawl_time||'').slice(0,19).replace('T',' ')} &nbsp;|&nbsp;
+        關鍵字: ${r.keywords_used.join(', ')}
+      </div>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="grid grid-cols-6 gap-3 mb-6">
+      ${[
+        ['總爬取', s.total_crawled, 'text-white'],
+        ['通過篩選', s.total_passed, 'text-green-400'],
+        ['BU1 區塊鏈金流', s.bu1_count, 'text-blue-400'],
+        ['BU2 AI應用', s.bu2_count, 'text-orange-400'],
+        ['Avg Fit', s.avg_fit, 'text-cyan-400'],
+        ['總預算', fmt(s.total_budget), 'text-yellow-400'],
+      ].map(([label, val, color]) => `
+        <div class="card p-3 text-center">
+          <div class="text-xs text-slate-400 mb-1">${label}</div>
+          <div class="stat-num ${color}" style="font-size:22px">${val}</div>
+        </div>
+      `).join('')}
+    </div>
+
+    <!-- Priority breakdown -->
+    <div class="grid grid-cols-3 gap-3 mb-6">
+      ${[
+        ['高優先級', s.high_count, 'bg-red-500'],
+        ['中優先級', s.medium_count, 'bg-yellow-500'],
+        ['低優先級', s.low_count, 'bg-slate-500'],
+      ].map(([label, val, bg]) => `
+        <div class="card p-3 flex items-center gap-3">
+          <div class="w-3 h-3 rounded-full ${bg}"></div>
+          <span class="text-sm text-slate-300">${label}</span>
+          <span class="ml-auto font-bold text-white">${val}</span>
+        </div>
+      `).join('')}
+    </div>
+
+    <!-- Tabs -->
+    <div class="flex gap-2 mb-4">
+      <button class="tab-btn active" onclick="reportTab(this,'all')">All (${s.total_passed})</button>
+      <button class="tab-btn" onclick="reportTab(this,'bu1')">BU1 區塊鏈金流 (${s.bu1_count})</button>
+      <button class="tab-btn" onclick="reportTab(this,'bu2')">BU2 AI應用 (${s.bu2_count})</button>
+      <button class="tab-btn" onclick="reportTab(this,'roi')">Top ROI</button>
+    </div>
+
+    <div class="card overflow-hidden">
+      <div class="overflow-x-auto max-h-[calc(100vh-380px)] overflow-y-auto">
+        <table id="report-table">
+          <thead><tr>
+            <th>#</th><th>標案名稱</th><th>機關名稱</th><th>預算</th>
+            <th>Fit</th><th>ROI</th><th>優先級</th><th>BU</th>
+            <th>技術標籤</th><th>匹配聯繫人</th>
+          </tr></thead>
+          <tbody id="report-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  `;
+
+  // Store data for tabs
+  window._reportData = r;
+  reportTab(document.querySelector('.tab-btn.active'), 'all');
+}
+
+function reportTab(btn, tab) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  const r = window._reportData;
+  const list = {all: r.opportunities, bu1: r.bu1_opportunities, bu2: r.bu2_opportunities, roi: r.top_roi}[tab];
+  document.getElementById('report-tbody').innerHTML = list.map((t, i) => {
+    const tag = t.tag_result || {};
+    const contacts = t.matched_contacts || [];
+    return `<tr onclick="showDetail('${t.tender_id}')" class="cursor-pointer">
+      <td class="text-center text-slate-400">${i+1}</td>
+      <td class="max-w-[220px] truncate">${t.tender_name||'?'}</td>
+      <td>${t.org_name||''}</td>
+      <td class="text-right">${fmt(t.budget)}</td>
+      <td>${fitBar(t.fit_score||0)}</td>
+      <td class="text-center">${(t.roi_score||0).toFixed(1)}</td>
+      <td>${priBadge(t.priority)}</td>
+      <td>${buBadge(tag.bu_assignment||'none')}</td>
+      <td>${tags((tag.tech_tags||[]).slice(0,3))}</td>
+      <td class="text-xs">${contacts.slice(0,2).map(c => `${c.name}<span class="text-slate-500">(${c.position||''})</span>`).join(', ') || '-'}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ─── Tender Detail Modal ───
+async function showDetail(tenderId) {
+  const modal = document.getElementById('detail-modal');
+  const body = document.getElementById('detail-body');
+  modal.classList.remove('hidden');
+  body.innerHTML = '<div class="text-center text-slate-400 py-8">Loading...</div>';
+
+  try {
+    const d = await fetchJSON(`/api/tender/${tenderId}`);
+    const t = d.matched || d.scored || d.tagged || d.crawl || {};
+    const tag = t.tag_result || {};
+    const contacts = t.matched_contacts || [];
+    const breakdown = t.fit_breakdown || {};
+
+    body.innerHTML = `
+      <div class="flex justify-between items-start mb-4">
+        <h3 class="text-lg font-bold text-white pr-8">${t.tender_name||'?'}</h3>
+        <button onclick="closeDetail()" class="text-slate-400 hover:text-white text-xl">&times;</button>
+      </div>
+
+      <!-- Basic Info -->
+      <div class="grid grid-cols-2 gap-x-6 gap-y-2 text-sm mb-6">
+        ${[
+          ['機關名稱', t.org_name],
+          ['標案案號', t.case_number],
+          ['預算金額', fmt(t.budget)],
+          ['招標方式', t.bid_method],
+          ['截止投標', t.deadline],
+          ['開標時間', t.open_time],
+          ['履約地點', t.location],
+          ['履約期限', t.duration],
+          ['標的分類', t.category],
+        ].filter(([,v]) => v && v !== 'N/A').map(([k,v]) => `
+          <div class="flex"><span class="text-slate-400 w-20 shrink-0">${k}</span><span class="text-white">${v}</span></div>
+        `).join('')}
+      </div>
+
+      ${t.url ? `<a href="${t.url}" target="_blank" class="text-blue-400 text-xs hover:underline mb-4 block">&#128279; 查看原始公告</a>` : ''}
+
+      <!-- AI Analysis -->
+      ${tag.bu_assignment ? `
+      <div class="border-t border-slate-700 pt-4 mb-4">
+        <h4 class="font-semibold text-sm text-slate-300 mb-3">AI 分析結果</h4>
+        <div class="grid grid-cols-2 gap-x-6 gap-y-2 text-sm mb-3">
+          <div class="flex"><span class="text-slate-400 w-20 shrink-0">BU</span>${buBadge(tag.bu_assignment)}</div>
+          <div class="flex"><span class="text-slate-400 w-20 shrink-0">客製化</span><span class="tag">${tag.customization_level||''}</span></div>
+          <div class="flex"><span class="text-slate-400 w-20 shrink-0">預估人天</span><span>${tag.estimated_effort_days||0} 天</span></div>
+        </div>
+        <div class="mb-2"><span class="text-slate-400 text-xs">技術標籤:</span> ${tags(tag.tech_tags)}</div>
+        <div class="mb-2"><span class="text-slate-400 text-xs">產業標籤:</span> ${tags(tag.industry_tags)}</div>
+        <div class="text-sm text-slate-300 bg-slate-800 rounded-lg p-3 mt-2">${tag.relevance_summary||''}</div>
+      </div>` : ''}
+
+      <!-- Scoring -->
+      ${t.fit_score != null ? `
+      <div class="border-t border-slate-700 pt-4 mb-4">
+        <h4 class="font-semibold text-sm text-slate-300 mb-3">評分結果</h4>
+        <div class="grid grid-cols-3 gap-4 mb-3">
+          <div class="text-center">
+            <div class="stat-num text-cyan-400" style="font-size:24px">${t.fit_score}</div>
+            <div class="text-xs text-slate-400">Fit Score</div>
+          </div>
+          <div class="text-center">
+            <div class="stat-num text-yellow-400" style="font-size:24px">${(t.roi_score||0).toFixed(1)}</div>
+            <div class="text-xs text-slate-400">ROI</div>
+          </div>
+          <div class="text-center">
+            ${priBadge(t.priority)}
+            <div class="text-xs text-slate-400 mt-1">Priority</div>
+          </div>
+        </div>
+        ${Object.keys(breakdown).length ? `
+        <div class="text-xs space-y-1">
+          ${Object.entries(breakdown).map(([k,v]) => `
+            <div class="flex items-center gap-2">
+              <span class="text-slate-400 w-36">${k}</span>
+              <div class="progress-bar flex-1"><div class="progress-fill bg-blue-500" style="width:${v}%"></div></div>
+              <span class="w-8 text-right">${v}</span>
+            </div>
+          `).join('')}
+        </div>` : ''}
+        <div class="grid grid-cols-2 gap-4 mt-3 text-xs text-slate-400">
+          <div>預估成本: ${fmt(t.estimated_cost)}</div>
+          <div>預估收益: ${fmt(t.estimated_revenue)}</div>
+        </div>
+      </div>` : ''}
+
+      <!-- Matched Contacts -->
+      ${contacts.length ? `
+      <div class="border-t border-slate-700 pt-4">
+        <h4 class="font-semibold text-sm text-slate-300 mb-3">匹配聯繫人 (${contacts.length})</h4>
+        <div class="space-y-3">
+          ${contacts.map(c => `
+            <div class="bg-slate-800 rounded-lg p-3 text-sm">
+              <div class="flex items-center gap-2 mb-1">
+                <span class="font-semibold text-white">${c.name}</span>
+                <span class="text-slate-400">${c.position||''}</span>
+                <span class="ml-auto badge badge-low">${c.match_score} pts</span>
+              </div>
+              <div class="text-xs text-slate-400">${c.company||''} ${c.department ? '/ '+c.department : ''}</div>
+              <div class="text-xs text-slate-500 mt-1">${c.industry_category||''}</div>
+              ${c.email ? `<div class="text-xs text-blue-400 mt-1">${c.email}</div>` : ''}
+              ${c.mobile ? `<div class="text-xs text-slate-400">${c.mobile}</div>` : ''}
+              <div class="text-xs text-slate-500 mt-1">${(c.reasons||[]).join(' | ')}</div>
+            </div>
+          `).join('')}
+        </div>
+      </div>` : ''}
+    `;
+  } catch(e) {
+    body.innerHTML = `<div class="text-red-400 p-4">Error: ${e.message}</div>`;
+  }
+}
+
+function closeDetail() {
+  document.getElementById('detail-modal').classList.add('hidden');
+}
+
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDetail(); });
+
+// ─── Init ───
+(async function init() {
+  try {
+    await Promise.all([loadRunState(), loadControlState()]);
+    renderView('overview');
+    setInterval(async () => {
+      try {
+        await loadControlState();
+      } catch (_) {}
+    }, 10000);
+  } catch(e) {
+    document.getElementById('main-content').innerHTML = `
+      <div class="text-red-400 p-8">Failed to load: ${e.message}<br>
+      <span class="text-slate-400 text-sm">Make sure the API server is running.</span></div>`;
+  }
+})();
+</script>
+</body>
+</html>

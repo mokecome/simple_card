@@ -1,0 +1,136 @@
+{
+  "contacts": [
+    {
+      "id": "C001",
+      "name": "王大明",
+      "role": "資訊處長",
+      "org": "台北市政府",
+      "org_keywords": ["台北市政府", "市政府"],
+      "industries": ["政府專案"],
+      "relationship": "warm",
+      "last_contact": "2026-02-15",
+      "notes": "去年合作過 AI 監控專案，對智慧城市感興趣"
+    },
+    {
+      "id": "C002",
+      "name": "李美玲",
+      "role": "IT 主管",
+      "org": "新竹縣政府",
+      "org_keywords": ["新竹縣政府", "新竹縣"],
+      "industries": ["政府專案"],
+      "relationship": "cold",
+      "last_contact": "2025-11-20",
+      "notes": "曾諮詢區塊鏈應用，尚未合作"
+    },
+    {
+      "id": "C003",
+      "name": "陳志豪",
+      "role": "資安長",
+      "org": "金融監督管理委員會",
+      "org_keywords": ["金管會", "金融監督"],
+      "industries": ["金融", "政府專案"],
+      "relationship": "warm",
+      "last_contact": "2026-01-10",
+      "notes": "對虛擬貨幣反洗錢監控系統有高度興趣"
+    },
+    {
+      "id": "C004",
+      "name": "張淑芬",
+      "role": "環保局副局長",
+      "org": "台中市政府環保局",
+      "org_keywords": ["台中市", "環保局"],
+      "industries": ["環保", "政府專案"],
+      "relationship": "warm",
+      "last_contact": "2026-03-01",
+      "notes": "廢棄物稽查 AI 監控專案正在評估中"
+    },
+    {
+      "id": "C005",
+      "name": "劉建國",
+      "role": "數位發展部門主管",
+      "org": "行政院",
+      "org_keywords": ["行政院", "數位發展部"],
+      "industries": ["政府專案"],
+      "relationship": "hot",
+      "last_contact": "2026-03-15",
+      "notes": "推動政府 AI 應用，預算充足"
+    },
+    {
+      "id": "C006",
+      "name": "黃威翔",
+      "role": "CTO",
+      "org": "台灣銀行",
+      "org_keywords": ["台灣銀行", "台銀"],
+      "industries": ["金融"],
+      "relationship": "warm",
+      "last_contact": "2026-02-28",
+      "notes": "關注金流追蹤與 AML 合規系統"
+    },
+    {
+      "id": "C007",
+      "name": "林雅婷",
+      "role": "資訊室主任",
+      "org": "台北榮民總醫院",
+      "org_keywords": ["榮民總醫院", "榮總", "台北榮總"],
+      "industries": ["政府專案"],
+      "relationship": "cold",
+      "last_contact": "2025-12-05",
+      "notes": "醫療 AI 應用需求，病歷系統智慧化"
+    },
+    {
+      "id": "C008",
+      "name": "吳明德",
+      "role": "廠長",
+      "org": "台灣中油",
+      "org_keywords": ["中油", "台灣中油"],
+      "industries": ["製造業"],
+      "relationship": "warm",
+      "last_contact": "2026-01-22",
+      "notes": "工業監控 IoT 整合需求"
+    },
+    {
+      "id": "C009",
+      "name": "許家榮",
+      "role": "警政署科長",
+      "org": "內政部警政署",
+      "org_keywords": ["警政署", "內政部"],
+      "industries": ["政府專案"],
+      "relationship": "cold",
+      "last_contact": "2025-09-10",
+      "notes": "詐騙防制與虛擬貨幣追蹤需求"
+    },
+    {
+      "id": "C010",
+      "name": "蔡佳蓉",
+      "role": "副總經理",
+      "org": "晶華酒店集團",
+      "org_keywords": ["晶華", "飯店", "旅宿"],
+      "industries": ["飯店", "旅宿"],
+      "relationship": "warm",
+      "last_contact": "2026-02-10",
+      "notes": "對 AI 推薦系統和智慧客服有興趣"
+    },
+    {
+      "id": "C011",
+      "name": "周政宏",
+      "role": "資訊中心主任",
+      "org": "台灣電力公司",
+      "org_keywords": ["台電", "台灣電力"],
+      "industries": ["製造業"],
+      "relationship": "warm",
+      "last_contact": "2026-03-05",
+      "notes": "電力設備 AI 預測維護系統評估中"
+    },
+    {
+      "id": "C012",
+      "name": "鄭雅文",
+      "role": "科技犯罪偵查官",
+      "org": "法務部調查局",
+      "org_keywords": ["調查局", "法務部"],
+      "industries": ["政府專案"],
+      "relationship": "hot",
+      "last_contact": "2026-03-20",
+      "notes": "區塊鏈金流追蹤專案即將招標，高度配合"
+    }
+  ]
+}

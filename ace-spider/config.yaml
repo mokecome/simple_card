@@ -1,0 +1,112 @@
+api:
+  openai:
+    api_key: ${OPENAI_API_KEY}
+    model: ${OPENAI_MODEL}
+    max_tokens: 1000
+    temperature: 0.2
+crawler:
+  base_url: https://acebidx.com/zh-TW/docs/tender/T
+  detail_base_url: /zh-TW/docs/tender/id
+  max_pages_per_keyword: 3
+  request_delay_sec: 2.5
+  request_timeout_sec: 30
+  max_retries: 3
+  user_agent: ace-spider/1.0 (procurement research bot)
+keywords:
+  primary:
+  - AI
+  - 區塊鏈
+  - 資安
+  - 虛擬貨幣
+  - 詐騙防制
+  - 數據分析
+  - 智慧監控
+  - SaaS
+  - CRM
+  - IoT
+  ai_subtags:
+  - 電腦視覺
+  - NLP
+  - 推薦系統
+  - 預測分析
+  - RPA
+  blockchain_subtags:
+  - 金流追蹤
+  - 錢包分析
+  - AML
+  - 交易監控
+  - 智能合約
+  industry_tags:
+  - 飯店
+  - 旅宿
+  - 製造業
+  - 工業監控
+  - 環保
+  - 廢棄物
+  - 金融
+  - 保險
+  - 政府專案
+scoring:
+  fit_weights:
+    tech_match: 0.35
+    industry_match: 0.15
+    solution_maturity: 0.2
+    customization_penalty: 0.1
+    budget_score: 0.2
+  budget_sweet_spot:
+    min: 1000000
+    max: 50000000
+  roi:
+    daily_rate: 8000
+    win_rate: 0.25
+    margin: 0.35
+filters:
+  min_budget: 1000000
+  min_fit_score: 40
+  min_roi: 1.5
+bu_mapping:
+  BU1:
+    name: 區塊鏈金流追蹤
+    keywords:
+    - 區塊鏈
+    - 虛擬貨幣
+    - 詐騙防制
+    - 金流追蹤
+    - 錢包分析
+    - AML
+    - 交易監控
+    - 智能合約
+    - 反洗錢
+    - 加密貨幣
+  BU2:
+    name: AI應用客製
+    keywords:
+    - AI
+    - 數據分析
+    - 智慧監控
+    - CRM
+    - SaaS
+    - 電腦視覺
+    - NLP
+    - 推薦系統
+    - 預測分析
+    - RPA
+    - IoT
+    - 轉換率
+    - 分析
+    - 推薦
+    - 影像辨識
+    - 機器學習
+    - 深度學習
+schedule:
+  mode: cron
+  cron: 0 8 * * 1
+  interval_hours: 24
+  run_on_start: true
+crm:
+  cards_db: /data1/165/ocr_v2/manage_card/cards.db
+  max_matches_per_tender: 5
+output:
+  data_dir: ./data
+  reports_dir: ./reports
+  dedup_file: ./data/seen_tenders.json
