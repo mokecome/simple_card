@@ -7,6 +7,7 @@ import ScanUploadPage from './pages/ScanUploadPage';
 import CardManagerPage from './pages/CardManagerPage';
 import AddCardPage from './pages/AddCardPage';
 import CardDetailPage from './pages/CardDetailPage';
+import SpiderPage from './pages/SpiderPage';
 
 const Home = () => { 
   const navigate = useNavigate();
@@ -20,6 +21,9 @@ const Home = () => {
           </Button>
           <Button color="default" size="large" block style={{ fontSize: 18 }} onClick={() => navigate('/cards')}>
             名片管理
+          </Button>
+          <Button color="success" size="large" block style={{ fontSize: 18 }} onClick={() => navigate('/spider')}>
+            商機爬蟲
           </Button>
         </Space>
       </Card>
@@ -36,6 +40,7 @@ function App() {
         <Route path="/cards" element={<CardManagerPage />} />
         <Route path="/add-card" element={<AddCardPage />} />
         <Route path="/cards/:id" element={<CardDetailPage />} />
+        <Route path="/spider" element={<SpiderPage />} />
       </Routes>
     </Router>
   );

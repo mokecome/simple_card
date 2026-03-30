@@ -3,11 +3,17 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 import os
+import sys
 import logging
 
 from backend.api.v1 import card, ocr
 from backend.core.config import *
 from backend.core.middleware import ErrorHandlingMiddleware, LoggingMiddleware
+
+_spider_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'ace-spider')
+if _spider_dir not in sys.path:
+    sys.path.append(_spider_dir)
+from dashboard_api import app as spider_app
 
 
 @asynccontextmanager
@@ -67,6 +73,8 @@ app.include_router(
     prefix=f"{API_V1_PREFIX}/ocr",
     tags=["OCR"]
 )
+
+app.mount("/spider", spider_app)
 
 # 掛載靜態文件目錄
 # 掛載 card_data 目錄（舊圖片）
