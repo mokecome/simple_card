@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Card,
   Button,
@@ -12,6 +12,7 @@ import {
   Divider,
   Loading,
   Dialog,
+  Modal,
   Tag,
   Picker
 } from 'antd-mobile';
@@ -27,15 +28,24 @@ import {
 } from 'antd-mobile-icons';
 import { Image, ImageViewer } from 'antd-mobile';
 import axios from 'axios';
+import CardCropEditor from '../components/CardCropEditor';
 
 const CardDetailPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [isEditing, setIsEditing] = useState(false);
+  const [isEditing, setIsEditing] = useState(searchParams.get('edit') === 'true');
   const [classifying, setClassifying] = useState(false);
   const [industryPickerVisible, setIndustryPickerVisible] = useState(false);
+
+  // 圖片編輯器狀態
+  const [imageEditorVisible, setImageEditorVisible] = useState(false);
+  const [cropEditorVisible, setCropEditorVisible] = useState(false);
+  const [editTarget, setEditTarget] = useState('front'); // 'front' | 'back'
+  const [editingImage, setEditingImage] = useState(null); // { file: File, previewUrl: string, cropCorners: array|null, croppedPreview: string|null }
+  const [editLoading, setEditLoading] = useState(false);
   
   // 統一的名片資料狀態 - 與資料庫欄位名稱保持一致
   const [cardData, setCardData] = useState({
@@ -174,6 +184,14 @@ const CardDetailPage = () => {
         }
       });
 
+      // 添加暫存的裁切座標
+      if (pendingCrop.front?.corners) {
+        saveData.append('front_crop_corners', JSON.stringify(pendingCrop.front.corners));
+      }
+      if (pendingCrop.back?.corners) {
+        saveData.append('back_crop_corners', JSON.stringify(pendingCrop.back.corners));
+      }
+
       const response = await axios.put(`/api/v1/cards/${id}`, saveData, {
         headers: {
           'Content-Type': 'multipart/form-data',
@@ -193,6 +211,7 @@ const CardDetailPage = () => {
         });
         setCardData({ ...processedData });
         setIsEditing(false);
+        setPendingCrop({ front: null, back: null });
         
         Toast.show({
           content: '名片更新成功！',
@@ -309,6 +328,247 @@ const CardDetailPage = () => {
     });
   };
 
+  // 開啟圖片編輯器
+  const handleOpenImageEditor = async (side) => {
+    setEditTarget(side);
+    setEditLoading(true);
+    setImageEditorVisible(true);
+
+    try {
+      // 取得原圖的 File 物件
+      const originalPath = side === 'front' ? cardData.front_image_path : cardData.back_image_path;
+      const imageUrl = getImageUrl(originalPath);
+      const response = await fetch(imageUrl);
+      const blob = await response.blob();
+      const file = new File([blob], 'original.jpg', { type: 'image/jpeg' });
+
+      // 取得目前的裁切座標
+      const cornersStr = side === 'front' ? cardData.front_crop_corners : cardData.back_crop_corners;
+      let cropCorners = null;
+      if (cornersStr) {
+        try { cropCorners = typeof cornersStr === 'string' ? JSON.parse(cornersStr) : cornersStr; }
+        catch { cropCorners = null; }
+      }
+
+      // 取得裁切預覽
+      const croppedPath = side === 'front' ? cardData.front_cropped_image_path : cardData.back_cropped_image_path;
+      const croppedUrl = getImageUrl(croppedPath || originalPath);
+
+      setEditingImage({
+        file,
+        previewUrl: URL.createObjectURL(file),
+        cropCorners,
+        croppedPreview: croppedUrl,
+      });
+    } catch (error) {
+      console.error('載入圖片失敗:', error);
+      Toast.show({ content: '載入圖片失敗', position: 'center' });
+      setImageEditorVisible(false);
+    } finally {
+      setEditLoading(false);
+    }
+  };
+
+  // 圖片編輯器 - 旋轉 90°
+  const handleEditorRotate = async () => {
+    if (!editingImage?.file) return;
+
+    setEditLoading(true);
+    try {
+      const imageBitmap = await createImageBitmap(editingImage.file);
+      const canvas = document.createElement('canvas');
+      canvas.width = imageBitmap.height;
+      canvas.height = imageBitmap.width;
+      const ctx = canvas.getContext('2d');
+      ctx.translate(canvas.width / 2, canvas.height / 2);
+      ctx.rotate(Math.PI / 2);
+      ctx.drawImage(imageBitmap, -imageBitmap.width / 2, -imageBitmap.height / 2);
+      imageBitmap.close();
+
+      const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.92));
+      const rotatedFile = new File([blob], editingImage.file.name, { type: 'image/jpeg' });
+
+      // 旋轉後自動重新偵測裁切
+      const formData = new FormData();
+      formData.append('file', rotatedFile);
+      formData.append('enhance', 'false');
+
+      const cropResponse = await axios.post('/api/v1/cards/crop-preview', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+
+      let croppedPreview = null;
+      let cropCorners = null;
+      if (cropResponse.data?.success && cropResponse.data?.data) {
+        croppedPreview = cropResponse.data.data.cropped_preview_base64;
+        cropCorners = cropResponse.data.data.corners;
+      }
+
+      setEditingImage({
+        file: rotatedFile,
+        previewUrl: URL.createObjectURL(rotatedFile),
+        cropCorners,
+        croppedPreview: croppedPreview || URL.createObjectURL(rotatedFile),
+      });
+
+      Toast.show({ content: '已旋轉 90°', position: 'center' });
+    } catch (error) {
+      console.error('旋轉失敗:', error);
+      Toast.show({ content: '旋轉失敗', position: 'center' });
+    } finally {
+      setEditLoading(false);
+    }
+  };
+
+  // 圖片編輯器 - 開啟裁切
+  const handleEditorOpenCrop = () => {
+    setCropEditorVisible(true);
+  };
+
+  // 圖片編輯器 - 裁切確認
+  const handleEditorCropConfirm = async (newCorners) => {
+    setCropEditorVisible(false);
+    if (!editingImage?.file) return;
+
+    setEditLoading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', editingImage.file);
+      formData.append('corners', JSON.stringify(newCorners));
+      formData.append('enhance', 'false');
+
+      const cropResponse = await axios.post('/api/v1/cards/crop-preview', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+
+      if (cropResponse.data?.success && cropResponse.data?.data) {
+        setEditingImage(prev => ({
+          ...prev,
+          cropCorners: cropResponse.data.data.corners || newCorners,
+          croppedPreview: cropResponse.data.data.cropped_preview_base64 || prev.croppedPreview,
+        }));
+      }
+    } catch (error) {
+      console.error('裁切預覽失敗:', error);
+    } finally {
+      setEditLoading(false);
+    }
+  };
+
+  // 圖片編輯器 - 儲存
+  const handleEditorSave = async () => {
+    if (!editingImage?.file) return;
+
+    setEditLoading(true);
+    try {
+      Toast.show({ content: '儲存中...', position: 'center', duration: 0 });
+
+      // 上傳旋轉後的原圖 + 裁切座標
+      const saveData = new FormData();
+      saveData.append(`${editTarget}_image`, editingImage.file);
+      if (editingImage.cropCorners) {
+        saveData.append(`${editTarget}_crop_corners`, JSON.stringify(editingImage.cropCorners));
+      }
+
+      // 送必要的文字欄位避免被覆蓋
+      const textFields = [
+        'name_zh', 'name_en', 'company_name_zh', 'company_name_en',
+        'position_zh', 'position_en', 'position1_zh', 'position1_en',
+        'department1_zh', 'department1_en', 'department2_zh', 'department2_en',
+        'department3_zh', 'department3_en',
+        'mobile_phone', 'company_phone1', 'company_phone2',
+        'email', 'line_id',
+        'company_address1_zh', 'company_address1_en',
+        'company_address2_zh', 'company_address2_en',
+        'note1', 'note2',
+      ];
+      textFields.forEach(key => {
+        if (cardData[key] !== undefined) {
+          saveData.append(key, cardData[key] || '');
+        }
+      });
+
+      const saveResponse = await axios.put(`/api/v1/cards/${id}`, saveData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+
+      if (saveResponse.data?.success) {
+        const updatedData = saveResponse.data.data;
+        const processedData = {};
+        Object.keys(updatedData).forEach(key => {
+          if (key === 'id' || key === 'created_at' || key === 'updated_at') {
+            processedData[key] = updatedData[key];
+          } else {
+            processedData[key] = updatedData[key] || '';
+          }
+        });
+        setCardData({ ...processedData });
+        setImageEditorVisible(false);
+        setEditingImage(null);
+        Toast.clear();
+        Toast.show({ content: '圖片已儲存', position: 'center' });
+      } else {
+        Toast.clear();
+        Toast.show({ content: saveResponse.data?.message || '儲存失敗', position: 'center' });
+      }
+    } catch (error) {
+      console.error('儲存失敗:', error);
+      Toast.clear();
+      Toast.show({ content: `儲存失敗: ${error.response?.data?.message || error.message}`, position: 'center' });
+    } finally {
+      setEditLoading(false);
+    }
+  };
+
+  // 圖片編輯器 - 取消
+  const handleEditorCancel = () => {
+    setImageEditorVisible(false);
+    setEditingImage(null);
+  };
+
+  // 取得顯示用的圖片 URL
+  const getDisplayImageUrl = (side) => {
+    const cropped = side === 'front' ? cardData.front_cropped_image_path : cardData.back_cropped_image_path;
+    const original = side === 'front' ? cardData.front_image_path : cardData.back_image_path;
+    return getImageUrl(cropped || original);
+  };
+
+  // 讀取圖片
+  const openImageViewer = (image) => {
+    let viewer = null;
+    viewer = ImageViewer.show({
+      image,
+      renderFooter: () => (
+        <button
+          type="button"
+          aria-label="關閉圖片"
+          onClick={(e) => {
+            e.stopPropagation();
+            viewer?.close();
+          }}
+          style={{
+            position: 'fixed',
+            top: '16px',
+            right: '16px',
+            width: '32px',
+            height: '32px',
+            borderRadius: '16px',
+            border: 'none',
+            background: 'rgba(0,0,0,0.55)',
+            color: '#fff',
+            fontSize: '20px',
+            lineHeight: '32px',
+            textAlign: 'center',
+            zIndex: 1000,
+            cursor: 'pointer',
+          }}
+        >
+          X
+        </button>
+      ),
+    });
+  };
+
   if (loading) {
     return (
       <div className="card-detail-page">
@@ -342,14 +602,14 @@ const CardDetailPage = () => {
       
       <div className="content" style={{ padding: '16px' }}>
         {/* 名片圖片顯示 */}
-        {(cardData.front_image_path || cardData.back_image_path) && (
+        {((cardData.front_cropped_image_path || cardData.front_image_path) || (cardData.back_cropped_image_path || cardData.back_image_path)) && (
           <Card
             title="名片圖片"
             extra={<PictureOutline />}
             style={{ marginBottom: '16px' }}
           >
             <div style={{ display: 'flex', gap: '12px', flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center' }}>
-              {cardData.front_image_path && (
+              {(cardData.front_cropped_image_path || cardData.front_image_path) && (
                 <div style={{ flex: '0 0 auto', width: '100%', maxWidth: '280px' }}>
                   <div style={{
                     fontSize: '13px',
@@ -360,18 +620,19 @@ const CardDetailPage = () => {
                     正面
                   </div>
                   <Image
-                    src={getImageUrl(cardData.front_image_path)}
+                    src={getDisplayImageUrl('front')}
                     fit="contain"
                     style={{
                       width: '100%',
-                      maxHeight: '200px',
+                      height: '200px',
                       borderRadius: '8px',
                       cursor: 'pointer',
                       border: '1px solid #e8e8e8',
-                      boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+                      boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                      backgroundColor: '#e8e8e8',
                     }}
                     onClick={() => {
-                      ImageViewer.show({ image: getImageUrl(cardData.front_image_path) });
+                      openImageViewer(getDisplayImageUrl('front'));
                     }}
                     fallback={
                       <div style={{
@@ -391,9 +652,20 @@ const CardDetailPage = () => {
                       </div>
                     }
                   />
+                  {cardData.front_image_path && (
+                    <Button
+                      size="small"
+                      color="primary"
+                      fill="outline"
+                      style={{ marginTop: '8px', width: '100%' }}
+                      onClick={() => handleOpenImageEditor('front')}
+                    >
+                      <EditSOutline /> 圖片編輯
+                    </Button>
+                  )}
                 </div>
               )}
-              {cardData.back_image_path && (
+              {(cardData.back_cropped_image_path || cardData.back_image_path) && (
                 <div style={{ flex: '0 0 auto', width: '100%', maxWidth: '280px' }}>
                   <div style={{
                     fontSize: '13px',
@@ -404,18 +676,19 @@ const CardDetailPage = () => {
                     反面
                   </div>
                   <Image
-                    src={getImageUrl(cardData.back_image_path)}
+                    src={getDisplayImageUrl('back')}
                     fit="contain"
                     style={{
                       width: '100%',
-                      maxHeight: '200px',
+                      height: '200px',
                       borderRadius: '8px',
                       cursor: 'pointer',
                       border: '1px solid #e8e8e8',
-                      boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+                      boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                      backgroundColor: '#e8e8e8',
                     }}
                     onClick={() => {
-                      ImageViewer.show({ image: getImageUrl(cardData.back_image_path) });
+                      openImageViewer(getDisplayImageUrl('back'));
                     }}
                     fallback={
                       <div style={{
@@ -435,6 +708,17 @@ const CardDetailPage = () => {
                       </div>
                     }
                   />
+                  {cardData.back_image_path && (
+                    <Button
+                      size="small"
+                      color="primary"
+                      fill="outline"
+                      style={{ marginTop: '8px', width: '100%' }}
+                      onClick={() => handleOpenImageEditor('back')}
+                    >
+                      <EditSOutline /> 圖片編輯
+                    </Button>
+                  )}
                 </div>
               )}
             </div>
@@ -1004,6 +1288,94 @@ const CardDetailPage = () => {
           )}
         </Space>
       </div>
+
+      {/* 圖片編輯 Modal */}
+      <Modal
+        visible={imageEditorVisible}
+        destroyOnClose
+        actions={[]}
+        content={
+          <div style={{ padding: '8px' }}>
+            <div style={{ fontSize: '16px', fontWeight: 'bold', textAlign: 'center', marginBottom: '12px' }}>
+              圖片編輯 ({editTarget === 'front' ? '正面' : '反面'})
+            </div>
+
+            {/* 預覽區 */}
+            {editLoading ? (
+              <div style={{
+                width: '100%', height: '250px',
+                display: 'flex', flexDirection: 'column',
+                alignItems: 'center', justifyContent: 'center',
+                background: '#f0f0f0', borderRadius: '8px', marginBottom: '12px',
+              }}>
+                <Loading />
+                <div style={{ fontSize: '14px', color: '#666', marginTop: '12px' }}>處理中...</div>
+              </div>
+            ) : editingImage?.croppedPreview ? (
+              <img
+                src={editingImage.croppedPreview}
+                alt="preview"
+                style={{
+                  width: '100%', maxHeight: '250px',
+                  objectFit: 'contain', borderRadius: '8px',
+                  marginBottom: '12px', background: '#f0f0f0',
+                }}
+              />
+            ) : null}
+
+            {/* 操作按鈕 */}
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+              <Button
+                style={{ flex: 1 }}
+                color="primary"
+                fill="outline"
+                disabled={editLoading || !editingImage}
+                onClick={handleEditorRotate}
+              >
+                ↻ 旋轉 90°
+              </Button>
+              <Button
+                style={{ flex: 1 }}
+                color="warning"
+                fill="outline"
+                disabled={editLoading || !editingImage}
+                onClick={handleEditorOpenCrop}
+              >
+                調整裁切
+              </Button>
+            </div>
+
+            {/* 儲存/取消 */}
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <Button
+                style={{ flex: 1 }}
+                onClick={handleEditorCancel}
+                disabled={editLoading}
+              >
+                取消
+              </Button>
+              <Button
+                style={{ flex: 1 }}
+                color="primary"
+                disabled={editLoading || !editingImage}
+                onClick={handleEditorSave}
+              >
+                儲存
+              </Button>
+            </div>
+          </div>
+        }
+        onClose={handleEditorCancel}
+      />
+
+      {/* 裁切編輯器（從圖片編輯 Modal 打開） */}
+      <CardCropEditor
+        visible={cropEditorVisible}
+        imageSrc={editingImage?.previewUrl || ''}
+        initialCorners={editingImage?.cropCorners}
+        onCancel={() => setCropEditorVisible(false)}
+        onConfirm={handleEditorCropConfirm}
+      />
     </div>
   );
 };

@@ -241,8 +241,8 @@ class CameraManager {
       // 移動端優化：嘗試獲取最高可用解析度
       constraints.video = {
         ...constraints.video,
-        width: { ideal: 3840, min: 1920 }, // 4K優先，最低1080p
-        height: { ideal: 2160, min: 1080 },
+        width: { ideal: 1920, min: 1280 },
+        height: { ideal: 1080, min: 720 },
         frameRate: { ideal: 30, min: 15 },
         aspectRatio: { ideal: 16/9 }
       };

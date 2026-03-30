@@ -301,8 +301,8 @@ export class MobileCameraStrategy extends BaseCameraStrategy {
     const highResConstraints = {
       video: {
         facingMode: this.currentFacingMode,
-        width: { ideal: 3840, min: 1920 }, // 4K優先，最低1080p
-        height: { ideal: 2160, min: 1080 },
+        width: { ideal: 1920, min: 1280 },
+        height: { ideal: 1080, min: 720 },
         frameRate: { ideal: 30, min: 15 },
         aspectRatio: { ideal: 16/9 }
       }
@@ -311,8 +311,8 @@ export class MobileCameraStrategy extends BaseCameraStrategy {
     const standardConstraints = {
       video: {
         facingMode: this.currentFacingMode,
-        width: { ideal: 2560, min: 1280 }, // 2K優先，最低720p
-        height: { ideal: 1440, min: 720 },
+        width: { ideal: 1280, min: 960 },
+        height: { ideal: 720, min: 540 },
         frameRate: { ideal: 30, min: 15 }
       }
     };
@@ -320,8 +320,8 @@ export class MobileCameraStrategy extends BaseCameraStrategy {
     const fallbackConstraints = {
       video: {
         facingMode: this.currentFacingMode,
-        width: { ideal: 1920, min: 1280 },
-        height: { ideal: 1080, min: 720 }
+        width: { ideal: 960 },
+        height: { ideal: 540 }
       }
     };
 

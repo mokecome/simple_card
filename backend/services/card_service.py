@@ -296,11 +296,10 @@ def create_card(db: Session, card: Card) -> dict:
     
     # 轉換為字典格式，處理datetime序列化
     card_dict = Card.model_validate(db_card).model_dump()
-    if card_dict.get('created_at'):
-        card_dict['created_at'] = card_dict['created_at'].isoformat()
-    if card_dict.get('updated_at'):
-        card_dict['updated_at'] = card_dict['updated_at'].isoformat()
-    
+    for key in card_dict:
+        if hasattr(card_dict[key], 'isoformat'):
+            card_dict[key] = card_dict[key].isoformat()
+
     return card_dict
 
 def update_card(db: Session, card_id: int, card: Card) -> dict:
@@ -322,11 +321,10 @@ def update_card(db: Session, card_id: int, card: Card) -> dict:
         
         # 轉換為字典格式，處理datetime序列化
         card_dict = Card.model_validate(db_card).model_dump()
-        if card_dict.get('created_at'):
-            card_dict['created_at'] = card_dict['created_at'].isoformat()
-        if card_dict.get('updated_at'):
-            card_dict['updated_at'] = card_dict['updated_at'].isoformat()
-        
+        for key in card_dict:
+            if hasattr(card_dict[key], 'isoformat'):
+                card_dict[key] = card_dict[key].isoformat()
+
         return card_dict
     except Exception as e:
         db.rollback()

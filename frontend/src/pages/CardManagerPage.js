@@ -32,6 +32,8 @@ import {
 } from 'antd-mobile-icons';
 import { Image, ImageViewer } from 'antd-mobile';
 import axios from 'axios';
+import { Dialog } from 'antd-mobile';
+
 
 const CardManagerPage = () => {
   const navigate = useNavigate(); 
@@ -516,26 +518,21 @@ const CardManagerPage = () => {
 
   // 刪除名片
   const handleDeleteCard = async (cardId) => {
-    Modal.confirm({
+    const confirmed = await Dialog.confirm({
       content: '確定要刪除這張名片嗎？',
-      onConfirm: async () => {
-        try {
-          await axios.delete(`/api/v1/cards/${cardId}`);
-          Toast.show({
-            content: '刪除成功',
-            position: 'center',
-          });
-          loadCards(); // 重新載入列表
-          loadGlobalStats(); // 更新全局統計
-        } catch (error) {
-          console.error('刪除失敗:', error);
-          Toast.show({
-            content: '刪除失敗',
-            position: 'center',
-          });
-        }
-      },
-    });
+      confirmText: '確定',
+      cancelText: '取消',
+    })
+    if (!confirmed) return
+    try {
+      await axios.delete(`/api/v1/cards/${cardId}`)
+      Toast.show({ content: '名片已刪除', position: 'center' })
+      loadCards()
+      loadGlobalStats?.()
+    } 
+    catch (error) {
+        Toast.show({ content: '刪除失敗', position: 'center' })
+    }
   };
 
   // 刪除所有名片
@@ -570,25 +567,35 @@ const CardManagerPage = () => {
     });
   };
 
-  // 匯出名片
+  // 匯出名片（帶篩選條件）
   const handleExport = async (format) => {
     try {
-      const response = await axios.get(`/api/v1/cards/export/download?format=${format}`, {
+      const params = new URLSearchParams({ format });
+      if (searchText) params.append('search', searchText);
+      if (industryFilter && industryFilter !== '全部') params.append('industry', industryFilter);
+      if (filterStatus && filterStatus !== 'all') params.append('status', filterStatus);
+
+      const response = await axios.get(`/api/v1/cards/export/download?${params.toString()}`, {
         responseType: 'blob',
       });
-      
-      // 創建下載鏈接
+
+      // 從 Content-Disposition 取得檔名
+      const disposition = response.headers['content-disposition'];
+      let filename = `cards.${format === 'excel' ? 'xlsx' : format === 'vcard' ? 'vcf' : 'csv'}`;
+      if (disposition) {
+        const match = disposition.match(/filename=(.+)/);
+        if (match) filename = match[1];
+      }
+
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
-      
-      const fileExtension = format === 'excel' ? 'xlsx' : (format === 'vcard' ? 'vcf' : 'csv');
-      link.setAttribute('download', `cards.${fileExtension}`);
+      link.setAttribute('download', filename);
       document.body.appendChild(link);
       link.click();
       link.remove();
       window.URL.revokeObjectURL(url);
-      
+
       Toast.show({
         content: `${format.toUpperCase()}匯出成功`,
         position: 'center',
@@ -825,6 +832,42 @@ const CardManagerPage = () => {
     }
   };
 
+  // 讀取圖片
+  const openImageViewer = (image) => {
+    let viewer = null;
+    viewer = ImageViewer.show({
+      image,
+      renderFooter: () => (
+        <button
+          type="button"
+          aria-label="關閉圖片"
+          onClick={(e) => {
+            e.stopPropagation();
+            viewer?.close();
+          }}
+          style={{
+            position: 'fixed',
+            top: '16px',
+            right: '16px',
+            width: '32px',
+            height: '32px',
+            borderRadius: '16px',
+            border: 'none',
+            background: 'rgba(0,0,0,0.55)',
+            color: '#fff',
+            fontSize: '20px',
+            lineHeight: '32px',
+            textAlign: 'center',
+            zIndex: 1000,
+            cursor: 'pointer',
+          }}
+        >
+          X
+        </button>
+      ),
+    });
+  };
+
   // 渲染名片項目
   const renderCardItem = (card) => {
     const cardStatus = checkCardStatus(card);
@@ -836,9 +879,10 @@ const CardManagerPage = () => {
     };
 
     // 獲取圖片URL
-    const frontImageUrl = getImageUrl(card.front_image_path);
-    const backImageUrl = getImageUrl(card.back_image_path);
+    const frontImageUrl = getImageUrl(card.front_cropped_image_path || card.front_image_path);
+    const backImageUrl = getImageUrl(card.back_cropped_image_path || card.back_image_path);
     const hasImage = frontImageUrl || backImageUrl;
+
 
     return (
     <Card
@@ -860,21 +904,22 @@ const CardManagerPage = () => {
             maxWidth: '280px'
           }}>
             {frontImageUrl && (
-              <div style={{ flex: 1 }}>
+              <div style={{ flex: 1, maxWidth: '50%' }}>
                 <div style={{ fontSize: '11px', color: '#999', marginBottom: '4px' }}>正面</div>
                 <Image
                   src={frontImageUrl}
-                  fit="cover"
+                  fit="contain"
                   style={{
                     width: '100%',
                     height: '70px',
                     borderRadius: '4px',
-                    objectFit: 'cover',
+                    objectFit: 'contain',
+                    backgroundColor: '#e8e8e8',
                     cursor: 'pointer'
                   }}
                   onClick={(e) => {
                     e.stopPropagation();
-                    ImageViewer.show({ image: frontImageUrl });
+                    openImageViewer(frontImageUrl);
                   }}
                   fallback={
                     <div style={{
@@ -894,21 +939,22 @@ const CardManagerPage = () => {
               </div>
             )}
             {backImageUrl && (
-              <div style={{ flex: 1 }}>
+              <div style={{ flex: 1, maxWidth: '50%' }}>
                 <div style={{ fontSize: '11px', color: '#999', marginBottom: '4px' }}>反面</div>
                 <Image
                   src={backImageUrl}
-                  fit="cover"
+                  fit="contain"
                   style={{
                     width: '100%',
                     height: '70px',
                     borderRadius: '4px',
-                    objectFit: 'cover',
+                    objectFit: 'contain',
+                    backgroundColor: '#e8e8e8',
                     cursor: 'pointer'
                   }}
                   onClick={(e) => {
                     e.stopPropagation();
-                    ImageViewer.show({ image: backImageUrl });
+                    openImageViewer(backImageUrl);
                   }}
                   fallback={
                     <div style={{
@@ -1143,7 +1189,7 @@ const CardManagerPage = () => {
               fill="outline"
               onClick={(e) => {
                 e.stopPropagation(); // 防止觸發卡片點擊事件
-                navigate(`/cards/${card.id}`);
+                navigate(`/cards/${card.id}?edit=true`);
               }}
             >
               <EditSOutline /> 編輯
@@ -1460,32 +1506,32 @@ const CardManagerPage = () => {
         {/* 操作按鈕 */}
         <Card style={{ marginBottom: '16px' }}>
           <Space direction="vertical" style={{ width: '100%' }}>
-            <Space style={{ width: '100%', gap: '8px' }}>
-              <Button 
-                color="primary" 
-                size="large" 
-                style={{ flex: 1 }}
+            <div style={{ display: 'flex', gap: '8px', width: '100%', maxWidth: '480px' }}>
+              <Button
+                color="primary"
+                size="middle"
+                style={{ flex: 1, maxWidth: '160px', fontSize: '13px', padding: '8px 0' }}
                 onClick={() => navigate('/add-card')}
               >
                 <AddOutline /> 手動新增
               </Button>
-              <Button 
-                color="warning" 
-                size="large" 
-                style={{ flex: 1 }}
+              <Button
+                color="warning"
+                size="middle"
+                style={{ flex: 1, maxWidth: '160px', fontSize: '13px', padding: '8px 0' }}
                 onClick={() => navigate('/scan')}
               >
                 <AddOutline /> OCR掃描
               </Button>
-              <Button 
-                color="success" 
-                size="large" 
-                style={{ flex: 1 }}
+              <Button
+                color="success"
+                size="middle"
+                style={{ flex: 1, maxWidth: '160px', fontSize: '13px', padding: '8px 0' }}
                 onClick={() => document.getElementById('file-input').click()}
               >
                 <UploadOutline /> 名片王匯入
               </Button>
-            </Space>
+            </div>
             
             {/* 隱藏的文件選擇器 */}
             <input

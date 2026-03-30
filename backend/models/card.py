@@ -49,6 +49,10 @@ class CardORM(Base):
     # 系統管理欄位
     front_image_path = Column(String(500))        # 正面圖片路径
     back_image_path = Column(String(500))         # 反面圖片路径
+    front_cropped_image_path = Column(String(500))# 正面裁切後圖片路徑
+    back_cropped_image_path = Column(String(500)) # 反面裁切後圖片路徑
+    front_crop_corners = Column(Text)             # 正面裁切四點座標 JSON
+    back_crop_corners = Column(Text)              # 反面裁切四點座標 JSON
     front_ocr_text = Column(Text)                 # 正面OCR原始文字
     back_ocr_text = Column(Text)                  # 反面OCR原始文字
     created_at = Column(DateTime, default=datetime.datetime.utcnow, index=True)
@@ -109,6 +113,10 @@ class Card(BaseModel):
     # 系統管理欄位
     front_image_path: Optional[str] = None        # 正面圖片路径
     back_image_path: Optional[str] = None         # 反面圖片路径
+    front_cropped_image_path: Optional[str] = None# 正面裁切後圖片路徑
+    back_cropped_image_path: Optional[str] = None # 反面裁切後圖片路徑
+    front_crop_corners: Optional[str] = None      # 正面裁切四點座標 JSON
+    back_crop_corners: Optional[str] = None       # 反面裁切四點座標 JSON
     front_ocr_text: Optional[str] = None          # 正面OCR原始文字
     back_ocr_text: Optional[str] = None           # 反面OCR原始文字
     created_at: Optional[datetime.datetime] = None

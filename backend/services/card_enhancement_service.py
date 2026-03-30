@@ -9,7 +9,7 @@ import numpy as np
 from PIL import Image, ImageEnhance
 import os
 import logging
-from typing import Optional, Tuple, List
+from typing import Optional, Tuple, List, Dict, Any
 import tempfile
 import gc
 import psutil
@@ -173,7 +173,123 @@ class CardEnhancementService:
             margin_x = int(w * 0.1)
             margin_y = int(h * 0.15)
             return [margin_x, margin_y, w - margin_x, h - margin_y]
-    
+
+    def auto_detect_coordinates_tight(self, image: np.ndarray, expand_pct: float = 0.03) -> Optional[np.ndarray]:
+        """
+        更貼合的名片座標偵測（用於裁切預覽）
+        使用多閾值 Canny + approxPolyDP（經 minAreaRect 驗證）
+        approxPolyDP 角點偏差太大時自動 fallback 到 minAreaRect
+        回傳四角座標 np.ndarray shape(4,2)，支援傾斜校正
+        找不到時回傳 None（前端顯示原圖，使用者手動裁切）
+        """
+        try:
+            h, w = image.shape[:2]
+            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+            blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+            image_area = h * w
+
+            # 自動 Canny 閾值（根據圖片中位數亮度）
+            median = np.median(gray)
+            auto_lower = int(max(0, (1.0 - 0.33) * median))
+            auto_upper = int(min(255, (1.0 + 0.33) * median))
+
+            # 多組閾值：自動 → 中等 → 低 → 很低 → 超低
+            threshold_levels = [
+                (auto_lower, auto_upper),
+                (50, 150),
+                (30, 100),
+                (15, 60),
+                (5, 30),
+            ]
+
+            best_contour = None
+            best_area = 0
+            kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (15, 15))
+
+            for lower, upper in threshold_levels:
+                edges = cv2.Canny(blurred, lower, upper)
+                closed = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, kernel, iterations=3)
+
+                contours, _ = cv2.findContours(closed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                valid = [c for c in contours if 0.05 * image_area < cv2.contourArea(c) < 0.9 * image_area]
+
+                if not valid:
+                    continue
+
+                largest = max(valid, key=cv2.contourArea)
+                area_pct = cv2.contourArea(largest) / image_area * 100
+
+                if area_pct > best_area:
+                    best_contour = largest
+                    best_area = area_pct
+
+                if area_pct >= 20:
+                    break
+
+            if best_contour is None:
+                logger.info("多閾值偵測全部失敗，不裁切")
+                return None
+
+            # 同時算 approxPolyDP 和 minAreaRect
+            peri = cv2.arcLength(best_contour, True)
+            poly_corners = None
+            for eps_mult in [0.02, 0.03, 0.05, 0.08]:
+                approx = cv2.approxPolyDP(best_contour, eps_mult * peri, True)
+                if len(approx) == 4:
+                    poly_corners = approx.reshape(4, 2).astype(np.float32)
+                    break
+
+            rect = cv2.minAreaRect(best_contour)
+            rect_corners = cv2.boxPoints(rect).astype(np.float32)
+
+            # 決定用哪組角點
+            corners = rect_corners
+            chosen = "minAreaRect"
+
+            if poly_corners is not None:
+                # 驗證：每個 approxPolyDP 角跟最近的 minAreaRect 角的最大偏差
+                max_diff = 0
+                for pc in poly_corners:
+                    dists = [np.linalg.norm(pc - rc) for rc in rect_corners]
+                    max_diff = max(max_diff, min(dists))
+
+                # 偏差 < 圖片短邊的 5% 就認為可靠
+                threshold = min(w, h) * 0.05
+                if max_diff < threshold:
+                    corners = poly_corners
+                    chosen = "approxPolyDP"
+
+            # 外擴
+            cx = np.mean(corners[:, 0])
+            cy = np.mean(corners[:, 1])
+            expanded = np.array([
+                [np.clip(cx + (c[0] - cx) * (1 + expand_pct), 0, w),
+                 np.clip(cy + (c[1] - cy) * (1 + expand_pct), 0, h)]
+                for c in corners
+            ], dtype=np.float32)
+
+            logger.info(f"tight偵測: {chosen}, area={best_area:.1f}%, expand={expand_pct*100:.0f}%")
+            return expanded
+
+        except Exception as e:
+            logger.error(f"緊密自動檢測座標失敗: {e}")
+            return None
+
+    # 把原本矩形座標轉成四點
+    def _box_to_corners(self, coords: List[int]) -> np.ndarray:
+        x1, y1, x2, y2 = coords
+        return np.array([
+            [x1, y1],
+            [x2, y1],
+            [x2, y2],
+            [x1, y2]
+        ], dtype=np.float32)
+
+    # 把 numpy 轉成可回傳 JSON 的 list
+    def _corners_to_list(self, corners: np.ndarray) -> List[List[float]]:
+        return [[float(x), float(y)] for x, y in corners]
+
+
     def perspective_transform(self, image: np.ndarray, corners: np.ndarray) -> np.ndarray:
         """
         透視變換矯正名片
@@ -278,74 +394,133 @@ class CardEnhancementService:
             logger.error(f"圖片增強失敗: {e}")
             return image
     
-    def process_image(self, input_path: str, output_path: Optional[str] = None, 
-                     scale_factor: int = 3, auto_detect: bool = True) -> Tuple[bool, Optional[str]]:
+    def process_image_with_metadata(
+        self,
+        input_path: str,
+        output_path: Optional[str] = None,
+        scale_factor: int = 3,
+        auto_detect: bool = True,
+        corners: Optional[List[List[float]]] = None,
+        tight_crop: bool = False
+    ) -> Dict[str, Any]:
         """
-        處理名片圖片
-        
-        Args:
-            input_path: 輸入圖片路徑
-            output_path: 輸出圖片路徑，None 則創建臨時文件
-            scale_factor: 放大倍數
-            auto_detect: 是否自動檢測
-            
-        Returns:
-            (成功標誌, 輸出路徑)
+        處理名片圖片並回傳裁切 metadata
         """
         if not self.enabled:
-            logger.info("名片增強功能已禁用")
-            return False, input_path
-        
+            logger.info("名片增強功能已停用")
+            return {
+                "success": False,
+                "output_path": input_path,
+                "corners": None,
+                "detected": False,
+                "message": "card enhancement disabled"
+            }
+
         try:
-            # 讀取圖片
             image = cv2.imread(input_path)
             if image is None:
                 logger.error(f"無法讀取圖片: {input_path}")
-                return False, input_path
-            
-            # 檢測或使用手動座標
-            if auto_detect:
-                logger.debug("使用自動檢測模式")
-                coords = self.auto_detect_coordinates(image)
-                x1, y1, x2, y2 = coords
-                corners = np.array([
-                    [x1, y1], [x2, y1],
-                    [x2, y2], [x1, y2]
-                ], dtype=np.float32)
+                return {
+                    "success": False,
+                    "output_path": input_path,
+                    "corners": None,
+                    "detected": False,
+                    "message": "failed to read image"
+                }
+
+            final_corners = None
+            detected = False
+            detection_method = "manual"
+
+            if corners:
+                logger.debug("使用前端傳入的四點座標")
+                final_corners = np.array(corners, dtype=np.float32)
+            elif auto_detect:
+                logger.debug(f"使用 OpenCV 偵測 (tight={tight_crop})")
+                if tight_crop:
+                    tight_corners = self.auto_detect_coordinates_tight(image)
+                    if tight_corners is not None:
+                        final_corners = tight_corners
+                        detected = True
+                        detection_method = "opencv_tight"
+                    else:
+                        coords = self.auto_detect_coordinates(image)
+                        final_corners = self._box_to_corners(coords)
+                        detection_method = "opencv_fallback"
+                else:
+                    detected_corners = self.detect_card_edges(image)
+                    if detected_corners is not None:
+                        final_corners = detected_corners.astype(np.float32)
+                        detected = True
+                        detection_method = "opencv_edge"
+                    else:
+                        coords = self.auto_detect_coordinates(image)
+                        final_corners = self._box_to_corners(coords)
+                        detection_method = "opencv_fallback"
             else:
-                logger.debug("使用手動座標模式")
-                x1, y1, x2, y2 = self.manual_coords
-                corners = np.array([
-                    [x1, y1], [x2, y1],
-                    [x2, y2], [x1, y2]
-                ], dtype=np.float32)
-            
-            # 透視變換裁切
-            logger.debug("執行透視變換")
-            cropped = self.perspective_transform(image, corners)
-            
-            # 品質增強
-            logger.debug(f"執行圖片增強，放大倍數: {scale_factor}")
-            enhanced = self.enhance_image(cropped, scale_factor)
-            
-            # 保存結果
+                logger.debug("使用手動預設矩形座標")
+                final_corners = self._box_to_corners(self.manual_coords)
+
+            cropped = self.perspective_transform(image, final_corners)
+
+            if scale_factor > 0:
+                result_image = self.enhance_image(cropped, scale_factor)
+            else:
+                result_image = cropped
+
             if output_path is None:
-                # 創建臨時文件
-                temp_fd, output_path = tempfile.mkstemp(suffix='.jpg', prefix='enhanced_card_')
-                os.close(temp_fd)  # 關閉文件描述符，但保留文件
-            
-            success = cv2.imwrite(output_path, enhanced)
+                prefix = 'cropped_card_' if scale_factor <= 0 else 'enhanced_card_'
+                temp_fd, output_path = tempfile.mkstemp(suffix='.jpg', prefix=prefix)
+                os.close(temp_fd)
+
+            success = cv2.imwrite(output_path, result_image)
+
             if success:
-                logger.info(f"圖片增強完成: {output_path}")
-                logger.debug(f"輸出尺寸: {enhanced.shape[1]}x{enhanced.shape[0]}")
-                return True, output_path
-            else:
-                logger.error(f"保存增強圖片失敗: {output_path}")
-                return False, input_path
-                
+                logger.info(f"圖片處理完成: {output_path} (method={detection_method})")
+                return {
+                    "success": True,
+                    "output_path": output_path,
+                    "corners": self._corners_to_list(final_corners),
+                    "detected": detected,
+                    "detection_method": detection_method,
+                    "message": "ok"
+                }
+
+            logger.error(f"寫入圖片失敗: {output_path}")
+            return {
+                "success": False,
+                "output_path": input_path,
+                "corners": self._corners_to_list(final_corners) if final_corners is not None else None,
+                "detected": detected,
+                "message": "failed to write image"
+            }
+
         except Exception as e:
             logger.error(f"圖片處理失敗: {e}")
-            return False, input_path
+            return {
+                "success": False,
+                "output_path": input_path,
+                "corners": None,
+                "detected": False,
+                "message": str(e)
+            }
+
+
+    def process_image(
+        self,
+        input_path: str,
+        output_path: Optional[str] = None,
+        scale_factor: int = 3,
+        auto_detect: bool = True
+    ) -> Tuple[bool, Optional[str]]:
+        result = self.process_image_with_metadata(
+            input_path=input_path,
+            output_path=output_path,
+            scale_factor=scale_factor,
+            auto_detect=auto_detect
+        )
+        return result["success"], result["output_path"]
+
 
 
 class BatchProcessingService:

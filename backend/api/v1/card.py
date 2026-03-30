@@ -16,6 +16,7 @@ from backend.services.card_service import (
 from backend.services.industry_classification_service import IndustryClassificationService
 from backend.services.ocr_service import OCRService
 from backend.services.task_manager import task_manager
+from backend.services.card_enhancement_service import CardEnhancementService
 from backend.models.db import get_db
 from backend.core.exceptions import (
     card_not_found_error,
@@ -42,8 +43,11 @@ import shutil
 from datetime import datetime
 import glob
 from PIL import Image
+import base64
 import json
 import tempfile
+
+
 
 # 設置日誌
 logging.basicConfig(level=logging.INFO)
@@ -65,6 +69,40 @@ def is_all_industry(industry: Optional[str]) -> bool:
 # 創建圖片存儲目錄
 UPLOAD_DIR = "output/card_images"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+def image_file_to_data_url(image_path: str) -> str:
+    with open(image_path, "rb") as f:
+        encoded = base64.b64encode(f.read()).decode("utf-8")
+    return f"data:image/jpeg;base64,{encoded}"
+
+def generate_cropped_image(
+    original_image_path: str,
+    upload_prefix: str,
+    crop_corners: Optional[str] = None
+):
+    parsed_corners = None
+    if crop_corners:
+        parsed_corners = json.loads(crop_corners)
+
+    enhancer = CardEnhancementService()
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    cropped_filename = f"{upload_prefix}_cropped_{timestamp}.jpg"
+    cropped_output_path = os.path.join(UPLOAD_DIR, cropped_filename)
+
+    result = enhancer.process_image_with_metadata(
+        input_path=original_image_path,
+        output_path=cropped_output_path,
+        scale_factor=0,
+        auto_detect=(parsed_corners is None),
+        corners=parsed_corners
+    )
+
+    if not result["success"]:
+        raise ValueError(f"裁切圖片失敗: {result.get('message', 'unknown error')}")
+
+    return result["output_path"], json.dumps(result["corners"], ensure_ascii=False)
+
 
 @router.get("/")
 def list_cards(
@@ -211,6 +249,134 @@ def get_cards_stats(db: Session = Depends(get_db)):
             error=e
         )
 
+@router.post("/crop-preview")
+async def crop_preview(
+    file: UploadFile = File(...),
+    corners: Optional[str] = Form(None),
+    enhance: Optional[str] = Form("false")
+):
+    """
+    名片裁切預覽 API
+    回傳裁切後預覽圖與四點座標
+    enhance=false: 輕量裁切（只做邊緣偵測+透視校正，快速預覽用）
+    enhance=true: 完整增強（裁切+放大+降噪+銳化，OCR用）
+    """
+    temp_input_path = None
+    temp_output_path = None
+
+    try:
+        if not file or not file.filename:
+            return ResponseHandler.error(message="未提供圖片", status_code=400)
+
+        suffix = os.path.splitext(file.filename)[1] or ".jpg"
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_input:
+            shutil.copyfileobj(file.file, temp_input)
+            temp_input_path = temp_input.name
+
+        parsed_corners = None
+        if corners:
+            parsed_corners = json.loads(corners)
+
+        do_enhance = enhance and enhance.lower() == "true"
+        scale_factor = 3 if do_enhance else 0
+
+        enhancer = CardEnhancementService()
+        result = enhancer.process_image_with_metadata(
+            input_path=temp_input_path,
+            output_path=None,
+            scale_factor=scale_factor,
+            auto_detect=(parsed_corners is None),
+            corners=parsed_corners,
+            tight_crop=(not do_enhance)
+        )
+
+        if not result["success"]:
+            return ResponseHandler.error(
+                message=f"裁切預覽失敗: {result.get('message', 'unknown error')}",
+                status_code=500
+            )
+
+        temp_output_path = result["output_path"]
+        cropped_preview_base64 = image_file_to_data_url(temp_output_path)
+
+        return ResponseHandler.success(
+            data={
+                "detected": result.get("detected", False),
+                "corners": result.get("corners"),
+                "cropped_preview_base64": cropped_preview_base64,
+                "detection_method": result.get("detection_method", "unknown")
+            },
+            message="裁切預覽成功"
+        )
+
+    except Exception as e:
+        return ResponseHandler.error(
+            message=f"裁切預覽失敗: {str(e)}",
+            status_code=500
+        )
+    finally:
+        for path in [temp_input_path, temp_output_path]:
+            if path and os.path.exists(path):
+                try:
+                    os.remove(path)
+                except Exception:
+                    pass
+
+
+@router.put("/{card_id}/crop")
+async def update_card_crop(
+    card_id: int,
+    side: str = Form(...),
+    corners: str = Form(...),
+    db: Session = Depends(get_db)
+):
+    """
+    只更新名片的裁切座標和裁切圖片，不影響其他欄位
+    side: 'front' 或 'back'
+    corners: JSON 格式的四角座標
+    """
+    try:
+        existing_card = get_card(db, card_id)
+        if not existing_card:
+            return ResponseHandler.error(message=f"找不到ID為 {card_id} 的名片", status_code=404)
+
+        if side not in ('front', 'back'):
+            return ResponseHandler.error(message="side 必須是 'front' 或 'back'", status_code=400)
+
+        image_path = existing_card.get(f'{side}_image_path')
+        if not image_path:
+            return ResponseHandler.error(message=f"該名片沒有{side}面原圖", status_code=400)
+
+        # 用原圖重新裁切
+        cropped_path, final_corners = generate_cropped_image(
+            original_image_path=image_path,
+            upload_prefix=side,
+            crop_corners=corners
+        )
+
+        # 只更新裁切相關欄位
+        db_card = db.query(CardORM).filter(CardORM.id == card_id).first()
+        setattr(db_card, f'{side}_cropped_image_path', cropped_path)
+        setattr(db_card, f'{side}_crop_corners', final_corners)
+        db.commit()
+        db.refresh(db_card)
+
+        # 清除緩存
+        cache.delete(f"card_{card_id}")
+
+        # 回傳更新後的完整資料
+        card_dict = Card.model_validate(db_card).model_dump()
+        for key in card_dict:
+            if hasattr(card_dict[key], 'isoformat'):
+                card_dict[key] = card_dict[key].isoformat()
+
+        return ResponseHandler.success(data=card_dict, message="裁切更新成功")
+
+    except Exception as e:
+        return ResponseHandler.error(message=f"裁切更新失敗: {str(e)}", status_code=500)
+
+
 @router.get("/{card_id}")
 def read_card(card_id: int, db: Session = Depends(get_db)):
     try:
@@ -286,6 +452,8 @@ async def add_card(
     # 圖片文件和OCR數據
     front_image: Optional[UploadFile] = File(None),
     back_image: Optional[UploadFile] = File(None),
+    front_crop_corners: Optional[str] = Form(None),
+    back_crop_corners: Optional[str] = Form(None),
     front_ocr_text: Optional[str] = Form(None),
     back_ocr_text: Optional[str] = Form(None),
     
@@ -298,6 +466,10 @@ async def add_card(
         # 保存圖片文件
         front_image_path = None
         back_image_path = None
+        front_cropped_image_path = None
+        back_cropped_image_path = None
+        final_front_crop_corners = None
+        final_back_crop_corners = None
         
         if front_image and front_image.filename:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -306,6 +478,12 @@ async def add_card(
             
             with open(front_image_path, "wb") as buffer:
                 shutil.copyfileobj(front_image.file, buffer)
+
+            front_cropped_image_path, final_front_crop_corners = generate_cropped_image(
+                original_image_path=front_image_path,
+                upload_prefix="front",
+                crop_corners=front_crop_corners
+            )
         
         if back_image and back_image.filename:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -314,6 +492,12 @@ async def add_card(
             
             with open(back_image_path, "wb") as buffer:
                 shutil.copyfileobj(back_image.file, buffer)
+
+            back_cropped_image_path, final_back_crop_corners = generate_cropped_image(
+                original_image_path=back_image_path,
+                upload_prefix="back",
+                crop_corners=back_crop_corners
+            )
         
         # 創建名片數據對象
         card_data = Card(
@@ -346,6 +530,10 @@ async def add_card(
             note2=note2,
             front_image_path=front_image_path,
             back_image_path=back_image_path,
+            front_cropped_image_path=front_cropped_image_path,
+            back_cropped_image_path=back_cropped_image_path,
+            front_crop_corners=final_front_crop_corners,
+            back_crop_corners=final_back_crop_corners,
             front_ocr_text=front_ocr_text,
             back_ocr_text=back_ocr_text
         )
@@ -409,6 +597,8 @@ async def edit_card(
     # 可選的圖片文件和OCR數據
     front_image: Optional[UploadFile] = File(None),
     back_image: Optional[UploadFile] = File(None),
+    front_crop_corners: Optional[str] = Form(None),
+    back_crop_corners: Optional[str] = Form(None),
     front_ocr_text: str = Form(""),
     back_ocr_text: str = Form(""),
     
@@ -429,22 +619,52 @@ async def edit_card(
         # 處理圖片文件
         front_image_path = existing_card.get('front_image_path')
         back_image_path = existing_card.get('back_image_path')
-        
+        front_cropped_image_path = existing_card.get('front_cropped_image_path')
+        back_cropped_image_path = existing_card.get('back_cropped_image_path')
+        final_front_crop_corners = existing_card.get('front_crop_corners')
+        final_back_crop_corners = existing_card.get('back_crop_corners')
+
         if front_image and front_image.filename:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             front_filename = f"front_{timestamp}_{front_image.filename}"
             front_image_path = os.path.join(UPLOAD_DIR, front_filename)
-            
+
             with open(front_image_path, "wb") as buffer:
                 shutil.copyfileobj(front_image.file, buffer)
-        
+
+            front_cropped_image_path, final_front_crop_corners = generate_cropped_image(
+                original_image_path=front_image_path,
+                upload_prefix="front",
+                crop_corners=front_crop_corners
+            )
+        elif front_crop_corners and front_image_path:
+            # 沒上傳新圖但有新的裁切座標 → 用原圖重新裁切
+            front_cropped_image_path, final_front_crop_corners = generate_cropped_image(
+                original_image_path=front_image_path,
+                upload_prefix="front",
+                crop_corners=front_crop_corners
+            )
+
         if back_image and back_image.filename:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             back_filename = f"back_{timestamp}_{back_image.filename}"
             back_image_path = os.path.join(UPLOAD_DIR, back_filename)
-            
+
             with open(back_image_path, "wb") as buffer:
                 shutil.copyfileobj(back_image.file, buffer)
+
+            back_cropped_image_path, final_back_crop_corners = generate_cropped_image(
+                original_image_path=back_image_path,
+                upload_prefix="back",
+                crop_corners=back_crop_corners
+            )
+        elif back_crop_corners and back_image_path:
+            # 沒上傳新圖但有新的裁切座標 → 用原圖重新裁切
+            back_cropped_image_path, final_back_crop_corners = generate_cropped_image(
+                original_image_path=back_image_path,
+                upload_prefix="back",
+                crop_corners=back_crop_corners
+            )
         
         # 創建名片更新數據對象
         card_data = Card(
@@ -478,6 +698,10 @@ async def edit_card(
             note2=note2,
             front_image_path=front_image_path,
             back_image_path=back_image_path,
+            front_cropped_image_path=front_cropped_image_path,
+            back_cropped_image_path=back_cropped_image_path,
+            front_crop_corners=final_front_crop_corners,
+            back_crop_corners=final_back_crop_corners,
             front_ocr_text=front_ocr_text if front_ocr_text else existing_card.get('front_ocr_text'),
             back_ocr_text=back_ocr_text if back_ocr_text else existing_card.get('back_ocr_text'),
             created_at=existing_card.get('created_at')  # 保持原創建時間
@@ -575,104 +799,175 @@ def remove_card(card_id: int, db: Session = Depends(get_db)):
         )
 
 @router.get("/export/download")
-def export_cards(format: str = Query("csv", enum=["csv", "excel", "vcard"]), db: Session = Depends(get_db)):
-    """匯出名片數據"""
+def export_cards(
+    format: str = Query("csv", enum=["csv", "excel", "vcard"]),
+    search: Optional[str] = Query(None, description="搜索關鍵詞"),
+    industry: Optional[str] = Query(None, description="產業分類篩選"),
+    status: Optional[str] = Query(None, description="狀態篩選: all / normal / problem"),
+    db: Session = Depends(get_db)
+):
+    """匯出名片數據，支持篩選條件"""
     try:
-        logger.info(f"開始匯出，格式: {format}")
-        cards = get_cards(db)
+        logger.info(f"開始匯出，格式: {format}, search={search}, industry={industry}, status={status}")
+
+        # 有篩選條件時用分頁查詢（不限筆數），否則取全部
+        has_filter = search or (industry and industry != '全部') or (status and status != 'all')
+        if has_filter:
+            cards, total = get_cards_paginated(
+                db, skip=0, limit=999999,
+                search=search,
+                industry=industry if industry and industry != '全部' else None,
+                filter_status=status if status and status != 'all' else None
+            )
+        else:
+            cards = get_cards(db)
+
         logger.info(f"找到 {len(cards)} 張名片")
-        
+
+        # 檔名日期
+        today = datetime.now().strftime("%Y-%m-%d")
+
+        # 33 個欄位定義（中文標頭 + DB 欄位名）
+        export_columns = [
+            ('ID', 'id'),
+            ('姓名（中文）', 'name_zh'),
+            ('姓名（英文）', 'name_en'),
+            ('公司名稱（中文）', 'company_name_zh'),
+            ('公司名稱（英文）', 'company_name_en'),
+            ('職位（中文）', 'position_zh'),
+            ('職位（英文）', 'position_en'),
+            ('職位1（中文）', 'position1_zh'),
+            ('職位1（英文）', 'position1_en'),
+            ('部門1（中文）', 'department1_zh'),
+            ('部門1（英文）', 'department1_en'),
+            ('部門2（中文）', 'department2_zh'),
+            ('部門2（英文）', 'department2_en'),
+            ('部門3（中文）', 'department3_zh'),
+            ('部門3（英文）', 'department3_en'),
+            ('手機', 'mobile_phone'),
+            ('公司電話1', 'company_phone1'),
+            ('公司電話2', 'company_phone2'),
+            ('傳真', 'fax'),
+            ('Email', 'email'),
+            ('Line ID', 'line_id'),
+            ('WeChat ID', 'wechat_id'),
+            ('公司地址1（中文）', 'company_address1_zh'),
+            ('公司地址1（英文）', 'company_address1_en'),
+            ('公司地址2（中文）', 'company_address2_zh'),
+            ('公司地址2（英文）', 'company_address2_en'),
+            ('備註1', 'note1'),
+            ('備註2', 'note2'),
+            ('產業分類', 'industry_category'),
+            ('分類信心度', 'classification_confidence'),
+            ('分類原因', 'classification_reason'),
+            ('建立時間', 'created_at'),
+            ('更新時間', 'updated_at'),
+        ]
+
+        def get_export_value(card, field):
+            value = card.get(field, '') or ''
+            if field == 'classification_confidence' and value:
+                try:
+                    return f'{float(value)*100:.0f}%'
+                except:
+                    pass
+            return value
+
         if format == "csv":
             output = io.StringIO()
             writer = csv.writer(output)
-            # 更新為新的標準化欄位
-            writer.writerow([
-                "姓名", "公司名稱", "職位", "部門1", "手機", "公司電話", 
-                "Email", "Line ID", "備註", "公司地址一", "公司地址二"
-            ])
+            writer.writerow([header for header, _ in export_columns])
             for card in cards:
-                writer.writerow([
-                    card.get('name_zh', '') or "",
-                    card.get('company_name_zh', '') or "",
-                    card.get('position_zh', '') or "",
-                    card.get('department1_zh', '') or "",
-                    card.get('mobile_phone', '') or "",
-                    card.get('company_phone1', '') or "",
-                    card.get('email', '') or "",
-                    card.get('line_id', '') or "",
-                    card.get('note1', '') or "",
-                    card.get('company_address1_zh', '') or "",
-                    card.get('company_address2_zh', '') or ""
-                ])
+                writer.writerow([get_export_value(card, field) for _, field in export_columns])
             output.seek(0)
-            content = output.getvalue().encode('utf-8-sig')  # 添加BOM以支持中文
-            
+            content = output.getvalue().encode('utf-8-sig')
+
             return StreamingResponse(
                 io.BytesIO(content),
                 media_type="text/csv",
                 headers={
-                    "Content-Disposition": "attachment; filename=cards.csv",
+                    "Content-Disposition": f"attachment; filename=cards_{today}.csv",
                     "Content-Type": "text/csv; charset=utf-8"
                 }
             )
-            
+
         elif format == "excel":
             try:
+                from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+
                 wb = openpyxl.Workbook()
                 ws = wb.active
                 ws.title = "名片資料"
-                
-                # 設置標題行 - 更新為新的標準化欄位
-                headers = [
-                    "姓名", "公司名稱", "職位", "部門1", "手機", "公司電話", 
-                    "Email", "Line ID", "備註", "公司地址一", "公司地址二"
-                ]
-                ws.append(headers)
-                
-                # 添加數據
-                for card in cards:
-                    ws.append([
-                        card.get('name_zh', '') or "",
-                        card.get('company_name_zh', '') or "",
-                        card.get('position_zh', '') or "",
-                        card.get('department1_zh', '') or "",
-                        card.get('mobile_phone', '') or "",
-                        card.get('company_phone1', '') or "",
-                        card.get('email', '') or "",
-                        card.get('line_id', '') or "",
-                        card.get('note1', '') or "",
-                        card.get('company_address1_zh', '') or "",
-                        card.get('company_address2_zh', '') or ""
-                    ])
-                
-                # 自動調整列寬
+
+                # 樣式定義
+                header_font = Font(name='Microsoft JhengHei', bold=True, color='FFFFFF', size=11)
+                header_fill = PatternFill(start_color='1F4E79', end_color='1F4E79', fill_type='solid')
+                header_alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+                light_blue_fill = PatternFill(start_color='D6E4F0', end_color='D6E4F0', fill_type='solid')
+                white_fill = PatternFill(start_color='FFFFFF', end_color='FFFFFF', fill_type='solid')
+                thin_border = Border(
+                    left=Side(style='thin', color='B0B0B0'),
+                    right=Side(style='thin', color='B0B0B0'),
+                    top=Side(style='thin', color='B0B0B0'),
+                    bottom=Side(style='thin', color='B0B0B0'),
+                )
+                data_font = Font(name='Microsoft JhengHei', size=10)
+                data_alignment = Alignment(vertical='center', wrap_text=False)
+
+                # 寫標頭
+                for col_idx, (header, _) in enumerate(export_columns, 1):
+                    cell = ws.cell(row=1, column=col_idx, value=header)
+                    cell.font = header_font
+                    cell.fill = header_fill
+                    cell.alignment = header_alignment
+                    cell.border = thin_border
+
+                # 寫資料
+                for row_idx, card in enumerate(cards, 2):
+                    fill = light_blue_fill if row_idx % 2 == 0 else white_fill
+                    for col_idx, (_, field) in enumerate(export_columns, 1):
+                        value = get_export_value(card, field)
+                        cell = ws.cell(row=row_idx, column=col_idx, value=value)
+                        cell.font = data_font
+                        cell.fill = fill
+                        cell.alignment = data_alignment
+                        cell.border = thin_border
+
+                # 自動調整欄寬（中文雙倍寬，最寬 45）
                 for column in ws.columns:
                     max_length = 0
-                    column_letter = column[0].column_letter
+                    col_letter = column[0].column_letter
                     for cell in column:
                         try:
-                            if len(str(cell.value)) > max_length:
-                                max_length = len(str(cell.value))
+                            text = str(cell.value or '')
+                            length = len(text) + sum(1 for c in text if ord(c) > 127)
+                            if length > max_length:
+                                max_length = length
                         except:
                             pass
-                    adjusted_width = min(max_length + 2, 50)
-                    ws.column_dimensions[column_letter].width = adjusted_width
-                
+                    ws.column_dimensions[col_letter].width = min(max_length + 3, 45)
+
+                # 凍結第一列 + 設定列高
+                ws.freeze_panes = 'A2'
+                ws.row_dimensions[1].height = 30
+                for row_idx in range(2, len(cards) + 2):
+                    ws.row_dimensions[row_idx].height = 22
+
                 output = io.BytesIO()
                 wb.save(output)
                 output.seek(0)
-                
+
                 logger.info("EXCEL文件生成成功")
-                
+
                 return StreamingResponse(
                     output,
                     media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     headers={
-                        "Content-Disposition": "attachment; filename=cards.xlsx",
+                        "Content-Disposition": f"attachment; filename=cards_{today}.xlsx",
                         "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                     }
                 )
-                
+
             except Exception as e:
                 logger.error(f"生成EXCEL文件時發生錯誤: {str(e)}")
                 raise HTTPException(status_code=500, detail=f"EXCEL生成失敗: {str(e)}")
@@ -706,7 +1001,7 @@ def export_cards(format: str = Query("csv", enum=["csv", "excel", "vcard"]), db:
                 io.BytesIO(content),
                 media_type="text/vcard",
                 headers={
-                    "Content-Disposition": "attachment; filename=cards.vcf",
+                    "Content-Disposition": f"attachment; filename=cards_{today}.vcf",
                     "Content-Type": "text/vcard; charset=utf-8"
                 }
             )

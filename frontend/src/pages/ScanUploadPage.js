@@ -27,6 +27,7 @@ import { API_BASE_URL } from '../config';
 import { getCameraManager } from '../utils/cameraManager';
 import { getDeviceType } from '../utils/deviceDetector';
 import MobileCameraModal from '../components/MobileCameraModal';
+import CardCropEditor from '../components/CardCropEditor';
 
 const ScanUploadPage = () => {
   const navigate = useNavigate();
@@ -36,17 +37,23 @@ const ScanUploadPage = () => {
   // 圖片管理狀態
   const [frontImage, setFrontImage] = useState({
     file: null,
-    preview: null,
+    originalPreview: null,
+    croppedPreview: null,
+    cropCorners: null,
     ocrText: '',
     parseStatus: null // 'success', 'error', 'parsing', null
   });
   const [backImage, setBackImage] = useState({
     file: null,
-    preview: null,
+    originalPreview: null,
+    croppedPreview: null,
+    cropCorners: null,
     ocrText: '',
     parseStatus: null // 'success', 'error', 'parsing', null
   });
   const [cameraModalVisible, setCameraModalVisible] = useState(false);
+  const [cropEditorVisible, setCropEditorVisible] = useState(false);
+  const [cropDetecting, setCropDetecting] = useState(false);
   const [currentCaptureTarget, setCurrentCaptureTarget] = useState('front'); // 'front' | 'back'
   const [stream, setStream] = useState(null);
 
@@ -264,43 +271,41 @@ const ScanUploadPage = () => {
         const nonEmptyFields = Object.keys(parsedFields).filter(key => parsedFields[key] && typeof parsedFields[key] === 'string' && parsedFields[key].trim() !== '');
         console.log('[DEBUG] Non-empty fields from backend:', nonEmptyFields);
         console.log('[DEBUG] Non-empty fields count:', nonEmptyFields.length);
-
-        // 使用對象引用來確保計數器在異步回調中正確更新
-        const countRef = { value: 0 };
-
+        
+        let filledFieldsCount = 0;
         setCardData(prevData => {
           const updatedData = { ...prevData };
           console.log('[DEBUG] parsedFields:', parsedFields);
           console.log('[DEBUG] prevData before update:', prevData);
-
+          
           Object.keys(parsedFields).forEach(field => {
             const value = parsedFields[field];
             const currentValue = updatedData[field];
             const hasValue = value && typeof value === 'string' && value.trim() !== '';
             const shouldUpdate = hasValue && (!currentValue || currentValue.trim() === '');
-
+            
             console.log(`[DEBUG] Field: ${field}, Value: "${value}", HasValue: ${hasValue}, Current: "${currentValue}", ShouldUpdate: ${shouldUpdate}`);
-
+            
             if (shouldUpdate) {
               updatedData[field] = value.trim();
-              countRef.value++;  // 使用對象屬性計數，確保外部能訪問到更新後的值
+              filledFieldsCount++;
               console.log(`[DEBUG] Updated field ${field} = "${value.trim()}"`);
             }
           });
-
+          
           console.log('[DEBUG] updatedData after update:', updatedData);
-          console.log('[DEBUG] filledFieldsCount:', countRef.value);
-
+          console.log('[DEBUG] filledFieldsCount:', filledFieldsCount);
+          
+          // 確保計數器能正確捕獲
+          setTimeout(() => {
+            Toast.show({
+              content: `${side === 'front' ? '正面' : '反面'}資料解析完成！已自動填入${filledFieldsCount}個欄位`,
+              position: 'center',
+            });
+          }, 100);
+          
           return updatedData;
         });
-
-        // Toast 顯示邏輯移到 setCardData 外部，使用 countRef 確保獲取正確的計數
-        setTimeout(() => {
-          Toast.show({
-            content: `${side === 'front' ? '正面' : '反面'}資料解析完成！已自動填入${countRef.value}個欄位`,
-            position: 'center',
-          });
-        }, 100);
         
         // 日誌已移除
         updateImageParseStatus(side, 'success');
@@ -332,6 +337,29 @@ const ScanUploadPage = () => {
       });
     }
   }, [updateImageParseStatus]);
+
+  const requestCropPreview = useCallback(async (file, corners = null, enhance = false) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('enhance', enhance ? 'true' : 'false');
+
+    if (corners) {
+      formData.append('corners', JSON.stringify(corners));
+    }
+
+    const response = await axios.post(`${API_BASE_URL}/cards/crop-preview`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+
+      if (response.data && response.data.success && response.data.data) {
+        return response.data.data;
+      }
+
+      throw new Error(response.data?.message || 'crop preview failed');
+  }, []);
+
 
   // 執行OCR並智能解析
   const performOCR = useCallback(async (file, side) => {
@@ -386,6 +414,72 @@ const ScanUploadPage = () => {
     }
   }, [parseAndFillOCRData, updateImageParseStatus]);
 
+  //const getCurrentImageState = () => {
+  //  return currentCaptureTarget === 'front' ? frontImage : backImage;
+  //};
+
+  const handleOpenCropEditor = useCallback(() => {
+    const currentImage = currentCaptureTarget === 'front' ? frontImage : backImage;
+
+    if (!currentImage.file || !currentImage.originalPreview) {
+      Toast.show({
+        content: '請先拍攝或上傳圖片',
+        position: 'center',
+      });
+      return;
+    }
+
+    setCropEditorVisible(true);
+  }, [currentCaptureTarget, frontImage, backImage]);
+
+  // 前端 canvas 裁切（即時，不發 API）
+  const cropImageWithCanvas = useCallback(async (file, corners) => {
+    // corners: [[x1,y1],[x2,y2],[x3,y3],[x4,y4]] (TL, TR, BR, BL) in natural pixels
+    const xs = corners.map(c => c[0]);
+    const ys = corners.map(c => c[1]);
+    const left = Math.min(...xs);
+    const top = Math.min(...ys);
+    const right = Math.max(...xs);
+    const bottom = Math.max(...ys);
+
+    const imageBitmap = await createImageBitmap(file);
+    const canvas = document.createElement('canvas');
+    canvas.width = right - left;
+    canvas.height = bottom - top;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(imageBitmap, left, top, canvas.width, canvas.height, 0, 0, canvas.width, canvas.height);
+    imageBitmap.close();
+
+    return canvas.toDataURL('image/jpeg', 0.92);
+  }, []);
+
+  const handleCropConfirm = useCallback(async (newCorners) => {
+    const currentImage = currentCaptureTarget === 'front' ? frontImage : backImage;
+
+    // 立即關閉 Modal
+    setCropEditorVisible(false);
+
+    if (!currentImage.file) return;
+
+    const setImage = currentCaptureTarget === 'front' ? setFrontImage : setBackImage;
+
+    try {
+      // 前端 canvas 即時裁切預覽
+      const croppedDataUrl = await cropImageWithCanvas(currentImage.file, newCorners);
+      setImage(prev => ({
+        ...prev,
+        cropCorners: newCorners,
+        croppedPreview: croppedDataUrl
+      }));
+    } catch (error) {
+      console.error('裁切預覽失敗:', error);
+      Toast.show({
+        content: '裁切預覽失敗',
+        position: 'center',
+      });
+    }
+  }, [currentCaptureTarget, frontImage, backImage, cropImageWithCanvas]);
+
   // 手動解析當前圖片
   const handleManualParse = useCallback(async () => {
     const currentImage = currentCaptureTarget === 'front' ? frontImage : backImage;
@@ -412,31 +506,105 @@ const ScanUploadPage = () => {
     }
   }, [currentCaptureTarget, frontImage, backImage, parseAndFillOCRData, performOCR]);
 
-  // 處理圖片上傳
+  // 旋轉圖片 90 度（只影響預覽和存檔圖片，不重新 OCR）
+  const handleRotateImage = useCallback(async () => {
+    const currentImage = currentCaptureTarget === 'front' ? frontImage : backImage;
+    if (!currentImage.file) return;
+
+    try {
+      const imageBitmap = await createImageBitmap(currentImage.file);
+      const canvas = document.createElement('canvas');
+      canvas.width = imageBitmap.height;
+      canvas.height = imageBitmap.width;
+      const ctx = canvas.getContext('2d');
+      ctx.translate(canvas.width / 2, canvas.height / 2);
+      ctx.rotate(Math.PI / 2);
+      ctx.drawImage(imageBitmap, -imageBitmap.width / 2, -imageBitmap.height / 2);
+      imageBitmap.close();
+
+      const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.92));
+      const rotatedFile = new File([blob], currentImage.file.name, { type: 'image/jpeg' });
+      const rotatedPreview = canvas.toDataURL('image/jpeg', 0.92);
+
+      const setImage = currentCaptureTarget === 'front' ? setFrontImage : setBackImage;
+
+      // 立即更新預覽（同步，不等後端）
+      setImage(prev => ({
+        ...prev,
+        file: rotatedFile,
+        originalPreview: rotatedPreview,
+        croppedPreview: null,
+        cropCorners: null,
+      }));
+
+      // 輕量裁切預覽（不做增強，不影響 OCR）
+      requestCropPreview(rotatedFile, null, false)
+        .then(cropData => {
+          setImage(prev => {
+            // 只在 file 還是這次旋轉的結果時才更新，避免 race condition
+            if (prev.file !== rotatedFile) return prev;
+            return {
+              ...prev,
+              croppedPreview: cropData.cropped_preview_base64 || null,
+              cropCorners: cropData.corners || null,
+            };
+          });
+        })
+        .catch(err => {
+          console.error('旋轉後裁切預覽失敗:', err);
+        });
+
+      Toast.show({ content: '已旋轉 90°', position: 'center' });
+    } catch (error) {
+      console.error('旋轉失敗:', error);
+      Toast.show({ content: '旋轉失敗', position: 'center' });
+    }
+  }, [currentCaptureTarget, frontImage, backImage, requestCropPreview]);
+
+  // 處理圖片上傳 — 管線A(裁切預覽)和管線B(OCR)同時獨立執行
   const handleImageUpload = useCallback(async (file, target = currentCaptureTarget) => {
     const reader = new FileReader();
-    reader.onload = (e) => {
-      if (target === 'front') {
-        setFrontImage(prev => ({ 
-          ...prev, 
-          file, 
-          preview: e.target.result,
-          parseStatus: null // 重置解析狀態
-        }));
-      } else {
-        setBackImage(prev => ({ 
-          ...prev, 
-          file, 
-          preview: e.target.result,
-          parseStatus: null // 重置解析狀態
-        }));
-      }
-    };
-    reader.readAsDataURL(file);
 
-    // 自動執行OCR
-    await performOCR(file, target);
-  }, [performOCR, currentCaptureTarget]);
+    reader.onload = async (e) => {
+      const originalPreview = e.target.result;
+      const setImage = target === 'front' ? setFrontImage : setBackImage;
+      const uploadedFile = file;
+
+      setImage(prev => ({
+        ...prev,
+        file,
+        originalPreview,
+        croppedPreview: null,
+        cropCorners: null,
+        ocrText: '',
+        parseStatus: null
+      }));
+
+      // 最優先：後端偵測 + 透視校正裁切
+      setCropDetecting(true);
+      try {
+        const cropData = await requestCropPreview(file, null, false);
+        setImage(prev => {
+          if (prev.file !== uploadedFile) return prev;
+          return {
+            ...prev,
+            cropCorners: cropData.corners || null,
+            croppedPreview: cropData.cropped_preview_base64 || null
+          };
+        });
+      } catch (error) {
+        console.error('裁切預覽失敗:', error);
+      } finally {
+        setCropDetecting(false);
+      }
+
+      // 裁切完成後才啟動 OCR（背景執行，不阻擋 UI）
+      performOCR(file, target);
+    };
+
+    reader.readAsDataURL(file);
+  }, [performOCR, currentCaptureTarget, requestCropPreview]);
+
 
   // 啟動攝像頭 - 使用新的相機管理器
   const startCamera = async (target) => {
@@ -461,7 +629,7 @@ const ScanUploadPage = () => {
         // 等待Modal渲染完成後啟動相機
         setTimeout(async () => {
           try {
-            const mediaStream = await cameraManager.startCamera(target, {
+            const mediaStream = await cameraManager.startCamera('back', {
               videoElement: videoRef.current,
               canvasElement: canvasRef.current
             });
@@ -683,6 +851,13 @@ const ScanUploadPage = () => {
       if (backImage.file) {
         saveData.append('back_image', backImage.file);
       }
+
+      if (frontImage.cropCorners) {
+        saveData.append('front_crop_corners', JSON.stringify(frontImage.cropCorners));
+      }
+      if (backImage.cropCorners) {
+        saveData.append('back_crop_corners', JSON.stringify(backImage.cropCorners));
+      }
       
       // 添加OCR原始文字
       if (frontImage.ocrText) {
@@ -813,18 +988,42 @@ const ScanUploadPage = () => {
               </div>
               
               {/* 顯示當前選中面的圖片 */}
-              {(currentCaptureTarget === 'front' ? frontImage.preview : backImage.preview) ? (
+              {cropDetecting ? (
+                <div
+                  style={{
+                    width: '100%',
+                    height: 'clamp(280px, 40vw, 400px)',
+                    borderRadius: '8px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    marginBottom: '16px',
+                    background: '#f0f0f0',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                  }}
+                >
+                  <Loading />
+                  <div style={{ fontSize: '14px', color: '#666', marginTop: '12px' }}>
+                    自動偵測名片邊緣中...
+                  </div>
+                </div>
+              ) : ((currentCaptureTarget === 'front'
+                ? (frontImage.croppedPreview || frontImage.originalPreview)
+                : (backImage.croppedPreview || backImage.originalPreview))) ? (
                 <img
-                  src={currentCaptureTarget === 'front' ? frontImage.preview : backImage.preview}
+                  src={currentCaptureTarget === 'front'
+                    ? (frontImage.croppedPreview || frontImage.originalPreview)
+                    : (backImage.croppedPreview || backImage.originalPreview)}
                   alt={`名片${currentCaptureTarget === 'front' ? '正面' : '反面'}`}
                   style={{
                     width: '100%',
                     height: 'clamp(280px, 40vw, 400px)',
-                    objectFit: 'cover',
+                    objectFit: 'contain',
                     borderRadius: '8px',
                     marginBottom: '16px',
                     boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-                    transition: 'all 0.3s ease'
+                    backgroundColor: '#f0f0f0',
                   }}
                 />
               ) : (
@@ -841,7 +1040,6 @@ const ScanUploadPage = () => {
                     color: '#999',
                     marginBottom: '16px',
                     background: '#fafafa',
-                    transition: 'all 0.3s ease'
                   }}
                 >
                   <CameraOutline style={{ fontSize: '64px', marginBottom: '12px', color: '#ccc' }} />
@@ -872,6 +1070,26 @@ const ScanUploadPage = () => {
                   <PictureOutline /> 相冊上傳
                 </Button>
               </div>
+              <div style={{ marginTop: '8px', display: 'flex', gap: '8px' }}>
+                <Button
+                  style={{ flex: 1 }}
+                  color="primary"
+                  fill="outline"
+                  disabled={cropDetecting || !(currentCaptureTarget === 'front' ? frontImage.file : backImage.file)}
+                  onClick={handleRotateImage}
+                >
+                  ↻ 旋轉 90°
+                </Button>
+                <Button
+                  style={{ flex: 1 }}
+                  color="warning"
+                  fill="outline"
+                  disabled={cropDetecting || !(currentCaptureTarget === 'front' ? frontImage.file : backImage.file)}
+                  onClick={handleOpenCropEditor}
+                >
+                  調整裁切
+                </Button>
+              </div>
 
               {/* 上傳進度顯示 */}
               {uploading && (
@@ -891,10 +1109,10 @@ const ScanUploadPage = () => {
                       width: '8px', 
                       height: '8px', 
                       borderRadius: '50%', 
-                      backgroundColor: frontImage.preview ? '#52c41a' : '#d9d9d9' 
+                      backgroundColor: frontImage.originalPreview ? '#52c41a' : '#d9d9d9' 
                     }}></div>
-                    <span style={{ fontSize: '12px', color: frontImage.preview ? '#52c41a' : '#8c8c8c' }}>
-                      正面 {frontImage.preview ? '已拍攝' : '未拍攝'}
+                    <span style={{ fontSize: '12px', color: frontImage.originalPreview ? '#52c41a' : '#8c8c8c' }}>
+                      正面 {frontImage.originalPreview ? '已拍攝' : '未拍攝'}
                     </span>
                     {frontImage.parseStatus && getParseStatusIcon(frontImage.parseStatus)}
                   </div>
@@ -903,10 +1121,10 @@ const ScanUploadPage = () => {
                       width: '8px', 
                       height: '8px', 
                       borderRadius: '50%', 
-                      backgroundColor: backImage.preview ? '#52c41a' : '#d9d9d9' 
+                      backgroundColor: backImage.originalPreview ? '#52c41a' : '#d9d9d9' 
                     }}></div>
-                    <span style={{ fontSize: '12px', color: backImage.preview ? '#52c41a' : '#8c8c8c' }}>
-                      反面 {backImage.preview ? '已拍攝' : '未拍攝'}
+                    <span style={{ fontSize: '12px', color: backImage.originalPreview ? '#52c41a' : '#8c8c8c' }}>
+                      反面 {backImage.originalPreview ? '已拍攝' : '未拍攝'}
                     </span>
                     {backImage.parseStatus && getParseStatusIcon(backImage.parseStatus)}
                   </div>
@@ -1192,7 +1410,7 @@ const ScanUploadPage = () => {
           onClose={stopCamera}
           onPhotoTaken={handleMobilePhotoTaken}
           cameraManager={cameraManager}
-          target={currentCaptureTarget}
+          target="back"
         />
       ) : (
         // Web端：使用傳統Modal
@@ -1238,6 +1456,18 @@ const ScanUploadPage = () => {
           onClose={stopCamera}
         />
       )}
+
+      <CardCropEditor
+        visible={cropEditorVisible}
+        imageSrc={(currentCaptureTarget === 'front'
+          ? frontImage.originalPreview
+          : backImage.originalPreview) || ''}
+        initialCorners={currentCaptureTarget === 'front'
+          ? frontImage.cropCorners
+          : backImage.cropCorners}
+        onCancel={() => setCropEditorVisible(false)}
+        onConfirm={handleCropConfirm}
+      />
 
       {/* 隱藏的文件選擇輸入 */}
       <input
