@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { isAuthenticated } from '../utils/auth';
 import LoginModal from './LoginModal';
 
 const ProtectedRoute = ({ children }) => {
+  const navigate = useNavigate();
   const [authed, setAuthed] = useState(isAuthenticated());
 
   const handleLogout = useCallback(() => {
@@ -20,7 +22,7 @@ const ProtectedRoute = ({ children }) => {
 
   return (
     <>
-      <LoginModal visible={!authed} onSuccess={handleLoginSuccess} />
+      <LoginModal visible={!authed} onSuccess={handleLoginSuccess} onClose={() => navigate('/')} />
       {authed && children}
     </>
   );

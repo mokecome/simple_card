@@ -50,7 +50,7 @@ const Home = () => {
           </Button>
         </Space>
       </Card>
-      <LoginModal visible={showLogin} onSuccess={handleLoginSuccess} />
+      <LoginModal visible={showLogin} onSuccess={handleLoginSuccess} onClose={() => setShowLogin(false)} />
     </div>
   );
 };

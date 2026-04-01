@@ -4,7 +4,7 @@ import { login } from '../api/auth';
 import { setToken } from '../utils/auth';
 import './LoginModal.css';
 
-const LoginModal = ({ visible, onSuccess }) => {
+const LoginModal = ({ visible, onSuccess, onClose }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -72,6 +72,17 @@ const LoginModal = ({ visible, onSuccess }) => {
         >
           登入
         </Button>
+        {onClose && (
+          <Button
+            block
+            fill="none"
+            size="large"
+            onClick={onClose}
+            style={{ marginTop: 8, color: '#999' }}
+          >
+            取消
+          </Button>
+        )}
       </div>
     </div>
   );
