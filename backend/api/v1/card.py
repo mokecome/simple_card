@@ -27,6 +27,7 @@ from backend.core.exceptions import (
 )
 from backend.core.response import ResponseHandler
 from backend.core.cache import cache
+from backend.dependencies.auth import get_current_user
 from backend.schemas.card import CardCreate, CardUpdate, CardResponse, ClassificationRequest, ClassificationResult, ClassificationBatchResponse
 from backend.schemas.task import BatchClassifyRequest, BatchClassifyResponse, TaskStatusResponse, TaskCancelResponse
 from typing import Dict, List, Optional
@@ -112,7 +113,8 @@ def list_cards(
     industry: Optional[str] = Query(None, description="产业分类过滤"),
     status: Optional[str] = Query("all", description="狀態篩選: all / normal / problem"),
     use_pagination: bool = Query(False, description="是否使用分頁"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: str = Depends(get_current_user)
 ):
     try:
         if use_pagination:
@@ -151,7 +153,7 @@ def list_cards(
         )
 
 @router.get("/stats")
-def get_cards_stats(db: Session = Depends(get_db)):
+def get_cards_stats(db: Session = Depends(get_db), current_user: str = Depends(get_current_user)):
     """獲取名片統計數據 - 全局統計，不受篩選影響"""
     cached_stats = cache.get(STATS_CACHE_KEY)
     if cached_stats is not None:
@@ -329,7 +331,8 @@ async def update_card_crop(
     card_id: int,
     side: str = Form(...),
     corners: str = Form(...),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: str = Depends(get_current_user)
 ):
     """
     只更新名片的裁切座標和裁切圖片，不影響其他欄位
@@ -378,7 +381,7 @@ async def update_card_crop(
 
 
 @router.get("/{card_id}")
-def read_card(card_id: int, db: Session = Depends(get_db)):
+def read_card(card_id: int, db: Session = Depends(get_db), current_user: str = Depends(get_current_user)):
     try:
         # 嘗試從緩存獲取
         cache_key = f"card_{card_id}"
@@ -456,8 +459,9 @@ async def add_card(
     back_crop_corners: Optional[str] = Form(None),
     front_ocr_text: Optional[str] = Form(None),
     back_ocr_text: Optional[str] = Form(None),
-    
-    db: Session = Depends(get_db)
+
+    db: Session = Depends(get_db),
+    current_user: str = Depends(get_current_user)
 ):
     """
     創建新名片，支持圖片上傳和OCR數據
@@ -601,8 +605,9 @@ async def edit_card(
     back_crop_corners: Optional[str] = Form(None),
     front_ocr_text: str = Form(""),
     back_ocr_text: str = Form(""),
-    
-    db: Session = Depends(get_db)
+
+    db: Session = Depends(get_db),
+    current_user: str = Depends(get_current_user)
 ):
     """
     更新名片資料，支持圖片上傳和OCR數據
@@ -733,7 +738,7 @@ async def edit_card(
         )
 
 @router.delete("/all")
-def delete_all_cards(db: Session = Depends(get_db)):
+def delete_all_cards(db: Session = Depends(get_db), current_user: str = Depends(get_current_user)):
     """刪除所有名片"""
     try:
         # 獲取所有名片數量
@@ -771,7 +776,7 @@ def delete_all_cards(db: Session = Depends(get_db)):
         )
 
 @router.delete("/{card_id}")
-def remove_card(card_id: int, db: Session = Depends(get_db)):
+def remove_card(card_id: int, db: Session = Depends(get_db), current_user: str = Depends(get_current_user)):
     try:
         card = get_card(db, card_id)
         if not card:
@@ -804,7 +809,8 @@ def export_cards(
     search: Optional[str] = Query(None, description="搜索關鍵詞"),
     industry: Optional[str] = Query(None, description="產業分類篩選"),
     status: Optional[str] = Query(None, description="狀態篩選: all / normal / problem"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: str = Depends(get_current_user)
 ):
     """匯出名片數據，支持篩選條件"""
     try:
@@ -1013,7 +1019,7 @@ def export_cards(
         raise HTTPException(status_code=500, detail=f"匯出失敗: {str(e)}")
 
 @router.post("/batch-import")
-async def batch_import_cards(db: Session = Depends(get_db)):
+async def batch_import_cards(db: Session = Depends(get_db), current_user: str = Depends(get_current_user)):
     """
     使用集成到OCRService的批量導入功能 - 整合智能批量處理
     """
@@ -1166,7 +1172,7 @@ async def batch_import_cards(db: Session = Depends(get_db)):
         )
 
 @router.post("/text-import")
-async def text_import_cards(file: UploadFile = File(...), db: Session = Depends(get_db)):
+async def text_import_cards(file: UploadFile = File(...), db: Session = Depends(get_db), current_user: str = Depends(get_current_user)):
     """
     文本導入功能：支持Excel和CSV文件的自動欄位識別和批量導入
     """
@@ -1425,7 +1431,7 @@ async def text_import_cards(file: UploadFile = File(...), db: Session = Depends(
 
 
 @router.post("/wcxf-import")
-async def wcxf_import_cards(file: UploadFile = File(...), db: Session = Depends(get_db)):
+async def wcxf_import_cards(file: UploadFile = File(...), db: Session = Depends(get_db), current_user: str = Depends(get_current_user)):
     """
     名片王匯入：上傳 .wcxf 檔，解析並批次寫入系統名片資料庫
     """
@@ -1504,7 +1510,8 @@ async def wcxf_import_cards(file: UploadFile = File(...), db: Session = Depends(
 @router.post("/classify-batch")
 def classify_cards_batch_async(
     request: BatchClassifyRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: str = Depends(get_current_user)
 ):
     """异步批量 AI 分类名片（后台任务）"""
     try:
@@ -1605,7 +1612,7 @@ def classify_cards_batch_async(
 
 
 @router.post("/{card_id}/classify")
-def classify_single_card(card_id: int, db: Session = Depends(get_db)):
+def classify_single_card(card_id: int, db: Session = Depends(get_db), current_user: str = Depends(get_current_user)):
     """重新分类单张名片"""
     try:
         card = db.query(CardORM).filter(CardORM.id == card_id).first()
@@ -1650,7 +1657,7 @@ def classify_single_card(card_id: int, db: Session = Depends(get_db)):
 # ==================== Task Management Endpoints ====================
 
 @router.get("/tasks/{task_id}")
-def get_task_status(task_id: str):
+def get_task_status(task_id: str, current_user: str = Depends(get_current_user)):
     """获取任务状态"""
     try:
         task_status = task_manager.get_status(task_id)
@@ -1672,7 +1679,7 @@ def get_task_status(task_id: str):
 
 
 @router.post("/tasks/{task_id}/cancel")
-def cancel_task(task_id: str):
+def cancel_task(task_id: str, current_user: str = Depends(get_current_user)):
     """取消任务"""
     try:
         task = task_manager.get_task(task_id)
