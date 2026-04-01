@@ -14,11 +14,10 @@ const apiClient = axios.create({
 // 請求攔截器
 apiClient.interceptors.request.use(
   (config) => {
-    // 可以在這裡添加認證 token
-    // const token = localStorage.getItem('token');
-    // if (token) {
-    //   config.headers.Authorization = `Bearer ${token}`;
-    // }
+    const token = localStorage.getItem('auth_token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
     
     console.log('API Request:', {
       method: config.method,
@@ -75,8 +74,9 @@ apiClient.interceptors.response.use(
           errorMessage = data?.message || '請求參數錯誤';
           break;
         case 401:
-          errorMessage = '未授權，請重新登入';
-          // 可以在這裡處理登出邏輯
+          errorMessage = data?.detail || '未授權，請重新登入';
+          localStorage.removeItem('auth_token');
+          window.dispatchEvent(new Event('auth:logout'));
           break;
         case 403:
           errorMessage = '權限不足';
