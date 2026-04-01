@@ -87,6 +87,11 @@ OCR_UPLOAD_FOLDER = os.getenv('OCR_UPLOAD_FOLDER', 'uploads')
 OCR_CONFIG_FILE = os.getenv('OCR_CONFIG_FILE', 'config/serials.json')
 OCR_BATCH_API_URL = os.getenv('OCR_BATCH_API_URL', 'https://local_llm.star-bit.io/api/card')
 
+# 認證設定
+AUTH_USERNAME = os.getenv('AUTH_USERNAME', 'admin')
+AUTH_PASSWORD = os.getenv('AUTH_PASSWORD', 'changeme')
+AUTH_SECRET_KEY = os.getenv('AUTH_SECRET_KEY', 'dev-secret-key-change-in-production')
+AUTH_TOKEN_EXPIRE_DAYS = get_env_int('AUTH_TOKEN_EXPIRE_DAYS', 7)
 
 # 日誌設定
 LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
@@ -185,6 +190,12 @@ class Settings:
     SERIAL_CONFIG_FILE = SERIAL_CONFIG_FILE
     SERIAL_DEFAULT_DURATION = SERIAL_DEFAULT_DURATION
     
+    # 認證設定
+    AUTH_USERNAME = AUTH_USERNAME
+    AUTH_PASSWORD = AUTH_PASSWORD
+    AUTH_SECRET_KEY = AUTH_SECRET_KEY
+    AUTH_TOKEN_EXPIRE_DAYS = AUTH_TOKEN_EXPIRE_DAYS
+
     # 文件相關設定
     MAX_FILE_SIZE = MAX_FILE_SIZE
     ALLOWED_FILE_TYPES = ALLOWED_FILE_TYPES

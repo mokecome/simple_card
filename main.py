@@ -6,7 +6,7 @@ import os
 import sys
 import logging
 
-from backend.api.v1 import card, ocr
+from backend.api.v1 import card, ocr, auth
 from backend.core.config import *
 from backend.core.middleware import ErrorHandlingMiddleware, LoggingMiddleware
 
@@ -72,6 +72,11 @@ app.include_router(
     ocr.router,
     prefix=f"{API_V1_PREFIX}/ocr",
     tags=["OCR"]
+)
+app.include_router(
+    auth.router,
+    prefix=f"{API_V1_PREFIX}/auth",
+    tags=["Authentication"]
 )
 
 app.mount("/spider", spider_app)
