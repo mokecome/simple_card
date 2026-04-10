@@ -315,10 +315,12 @@ const CardDetailPage = () => {
     return imagePath;
   };
 
-  // 格式化日期
+  // 格式化日期（後端存的是 UTC，前端轉成本地時區顯示）
   const formatDate = (dateString) => {
     if (!dateString) return '';
-    const date = new Date(dateString);
+    // 後端回傳的 ISO 格式沒有帶 Z，需補上讓瀏覽器識別為 UTC
+    const utcString = dateString.endsWith('Z') ? dateString : dateString + 'Z';
+    const date = new Date(utcString);
     return date.toLocaleString('zh-TW', {
       year: 'numeric',
       month: '2-digit',
@@ -572,7 +574,7 @@ const CardDetailPage = () => {
   if (loading) {
     return (
       <div className="card-detail-page">
-        <NavBar onBack={() => navigate('/cards')}>名片詳情</NavBar>
+        <NavBar onBack={() => window.history.length > 1 ? navigate(-1) : navigate('/cards')}>名片詳情</NavBar>
         <div style={{ padding: '50px', textAlign: 'center' }}>
           <Loading />
         </div>
@@ -583,7 +585,7 @@ const CardDetailPage = () => {
   return (
     <div className="card-detail-page">
       <NavBar 
-        onBack={() => navigate('/cards')}
+        onBack={() => window.history.length > 1 ? navigate(-1) : navigate('/cards')}
         right={
           <Space>
             <Button 
