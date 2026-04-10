@@ -456,6 +456,8 @@ def get_industry_breakdown(
             query = query.filter(problem_condition)
         else:
             query = query.filter(~problem_condition)
+    elif filter_status == "duplicate":
+        query = query.filter(CardORM.duplicate_group_id.isnot(None))
 
     query = query.group_by(CardORM.industry_category)
     rows = query.all()
@@ -505,19 +507,30 @@ def update_card(db: Session, card_id: int, card: Card) -> dict:
     db_card = db.query(CardORM).filter(CardORM.id == card_id).first()
     if not db_card:
         return None
-    
+
+    # 記住舊的 name/company 以便更新重複組
+    old_name_zh = db_card.name_zh
+    old_company_name_zh = db_card.company_name_zh
+
     # 獲取要更新的數據，允許空字符串，只排除 None 值和 id 字段
     update_data = card.model_dump(exclude={'id'})
-    
+
     for k, v in update_data.items():
         # 允許空字符串，但跳過 None 值和時間戳字段
         if hasattr(db_card, k) and v is not None and k not in ['created_at']:
             setattr(db_card, k, v)
-    
+
     try:
         db.commit()
         db.refresh(db_card)
-        
+
+        # 更新重複組標記（如果 name 或 company 變了）
+        update_duplicate_group(db, old_name_zh, old_company_name_zh)
+        if db_card.name_zh != old_name_zh or db_card.company_name_zh != old_company_name_zh:
+            update_duplicate_group(db, db_card.name_zh, db_card.company_name_zh)
+        db.commit()
+        db.refresh(db_card)
+
         # 轉換為字典格式，處理datetime序列化
         card_dict = Card.model_validate(db_card).model_dump()
         for key in card_dict:
