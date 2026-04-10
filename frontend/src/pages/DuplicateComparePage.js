@@ -31,12 +31,12 @@ export default function DuplicateComparePage() {
     setLoading(true);
     setSelectedForDelete(new Set());
     try {
-      const res = await apiClient.get('/api/v1/cards/duplicates', {
+      const data = await apiClient.get('/api/v1/cards/duplicates', {
         params: { skip: index, limit: 1 }
       });
-      if (res.data?.success && res.data.data) {
-        setGroups(res.data.data.groups || []);
-        setTotalGroups(res.data.data.total_groups || 0);
+      if (data) {
+        setGroups(data.groups || []);
+        setTotalGroups(data.total_groups || 0);
         setCurrentIndex(index);
       }
     } catch (err) {
