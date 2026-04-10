@@ -1293,6 +1293,20 @@ const CardManagerPage = () => {
             </Button>
           </Space>
 
+          {/* 重複名片：進入比對按鈕 */}
+          {filterStatus === 'duplicate' && (
+            <div style={{ marginTop: '12px' }}>
+              <Button
+                color="warning"
+                size="small"
+                block
+                onClick={() => navigate('/cards/duplicates/all')}
+              >
+                進入重複名片比對
+              </Button>
+            </div>
+          )}
+
           {/* 高級篩選面板 */}
           {advancedFilterVisible && (
             <div style={{ marginTop: '16px', padding: '16px', backgroundColor: '#f9f9f9', borderRadius: '8px' }}>

@@ -66,7 +66,7 @@ export default function DuplicateComparePage() {
   }, []);
 
   useEffect(() => {
-    if (groupId) {
+    if (groupId && groupId !== 'all') {
       loadGroupById(groupId);
     } else {
       loadGroupByIndex(0);
