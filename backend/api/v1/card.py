@@ -12,6 +12,8 @@ from backend.services.card_service import (
     get_cards_count,
     iterate_cards_for_stats,
     get_industry_breakdown,
+    get_duplicate_groups,
+    review_duplicate_group,
 )
 from backend.services.industry_classification_service import IndustryClassificationService
 from backend.services.ocr_service import OCRService
@@ -47,6 +49,8 @@ from PIL import Image
 import base64
 import json
 import tempfile
+import cv2
+import numpy as np
 
 
 
@@ -76,11 +80,46 @@ def image_file_to_data_url(image_path: str) -> str:
         encoded = base64.b64encode(f.read()).decode("utf-8")
     return f"data:image/jpeg;base64,{encoded}"
 
+def simple_rect_crop(
+    original_image_path: str,
+    upload_prefix: str,
+    crop_corners: Optional[str] = None
+):
+    """簡單矩形裁切（拍照用）— 不做透視矯正，只按 corners 的 bounding box 裁切"""
+    image = cv2.imread(original_image_path)
+    if image is None:
+        raise ValueError(f"無法讀取圖片: {original_image_path}")
+
+    if crop_corners:
+        parsed_corners = json.loads(crop_corners)
+        xs = [c[0] for c in parsed_corners]
+        ys = [c[1] for c in parsed_corners]
+        h, w = image.shape[:2]
+        left = max(0, int(min(xs)))
+        top = max(0, int(min(ys)))
+        right = min(w, int(max(xs)))
+        bottom = min(h, int(max(ys)))
+        cropped = image[top:bottom, left:right]
+        final_corners = [[left, top], [right, top], [right, bottom], [left, bottom]]
+    else:
+        cropped = image
+        h, w = image.shape[:2]
+        final_corners = [[0, 0], [w, 0], [w, h], [0, h]]
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    cropped_filename = f"{upload_prefix}_cropped_{timestamp}.jpg"
+    cropped_output_path = os.path.join(UPLOAD_DIR, cropped_filename)
+
+    cv2.imwrite(cropped_output_path, cropped)
+    return cropped_output_path, json.dumps(final_corners, ensure_ascii=False)
+
+
 def generate_cropped_image(
     original_image_path: str,
     upload_prefix: str,
     crop_corners: Optional[str] = None
 ):
+    """透視矯正裁切（相簿上傳用）"""
     parsed_corners = None
     if crop_corners:
         parsed_corners = json.loads(crop_corners)
@@ -105,6 +144,75 @@ def generate_cropped_image(
     return result["output_path"], json.dumps(result["corners"], ensure_ascii=False)
 
 
+def _crop_image_by_source(
+    original_image_path: str,
+    upload_prefix: str,
+    crop_corners: Optional[str] = None,
+    image_source: Optional[str] = None,
+    cropped_temp_path: Optional[str] = None
+):
+    """根據圖片來源選擇裁切方式：
+    1. 有 cropped_temp_path（上傳自動裁切，使用者未手動調整）→ 直接使用已裁切的圖
+    2. camera（拍照）→ 簡單矩形裁切
+    3. upload 且手動調整過（無 temp_path）→ 簡單矩形裁切
+    """
+    # 有已裁切好的暫存圖 → 直接重新命名使用
+    if cropped_temp_path and os.path.exists(cropped_temp_path):
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        final_filename = f"{upload_prefix}_cropped_{timestamp}.jpg"
+        final_path = os.path.join(UPLOAD_DIR, final_filename)
+        shutil.move(cropped_temp_path, final_path)
+        corners_str = json.dumps(json.loads(crop_corners), ensure_ascii=False) if crop_corners else "[]"
+        return final_path, corners_str
+
+    # 拍照或手動調整過 → 簡單矩形裁切
+    return simple_rect_crop(
+        original_image_path=original_image_path,
+        upload_prefix=upload_prefix,
+        crop_corners=crop_corners
+    )
+
+
+@router.get("/duplicates")
+def list_duplicate_groups(
+    skip: int = Query(0, ge=0, description="跳過組數"),
+    limit: int = Query(1, ge=1, le=50, description="每次取幾組"),
+    db: Session = Depends(get_db),
+    current_user: str = Depends(get_current_user)
+):
+    """取得待處理的重複名片組別"""
+    try:
+        groups, total_groups = get_duplicate_groups(db, skip=skip, limit=limit)
+        return ResponseHandler.success(
+            data={
+                "groups": groups,
+                "total_groups": total_groups,
+                "current_index": skip,
+            },
+            message="取得重複組別成功"
+        )
+    except Exception as e:
+        logger.error(f"取得重複組別失敗: {str(e)}")
+        return ResponseHandler.error(message="取得重複組別失敗", error=e, status_code=400)
+
+
+@router.post("/duplicates/{group_id}/review")
+def review_group(
+    group_id: str,
+    db: Session = Depends(get_db),
+    current_user: str = Depends(get_current_user)
+):
+    """標記重複組為已審查（全部保留）"""
+    try:
+        success = review_duplicate_group(db, group_id)
+        if not success:
+            return ResponseHandler.error(message=f"找不到重複組 {group_id}", status_code=404)
+        return ResponseHandler.success(message="已標記為全部保留")
+    except Exception as e:
+        logger.error(f"標記審查失敗: {str(e)}")
+        return ResponseHandler.error(message="標記審查失敗", error=e, status_code=400)
+
+
 @router.get("/")
 def list_cards(
     skip: int = Query(0, ge=0, description="跳過記錄數"),
@@ -113,19 +221,37 @@ def list_cards(
     industry: Optional[str] = Query(None, description="产业分类过滤"),
     status: Optional[str] = Query("all", description="狀態篩選: all / normal / problem"),
     use_pagination: bool = Query(False, description="是否使用分頁"),
+    # 高級篩選
+    name_zh: Optional[str] = Query(None, description="中文姓名篩選"),
+    name_en: Optional[str] = Query(None, description="英文姓名篩選"),
+    company: Optional[str] = Query(None, description="公司篩選"),
+    position: Optional[str] = Query(None, description="職位篩選"),
+    date_from: Optional[str] = Query(None, description="導入日期起 (YYYY-MM-DD)"),
+    date_to: Optional[str] = Query(None, description="導入日期迄 (YYYY-MM-DD)"),
+    has_phone: Optional[bool] = Query(None, description="有無電話"),
+    has_email: Optional[bool] = Query(None, description="有無Email"),
+    has_address: Optional[bool] = Query(None, description="有無地址"),
     db: Session = Depends(get_db),
     current_user: str = Depends(get_current_user)
 ):
     try:
         if use_pagination:
-            # 使用分頁查詢（支持产业过滤）
-            cards, total = get_cards_paginated(db, skip=skip, limit=limit, search=search, industry=industry, filter_status=status)
+            # 使用分頁查詢（支持产业过滤 + 高級篩選）
+            cards, total = get_cards_paginated(
+                db, skip=skip, limit=limit, search=search, industry=industry, filter_status=status,
+                name_zh=name_zh, name_en=name_en, company=company, position=position,
+                date_from=date_from, date_to=date_to,
+                has_phone=has_phone, has_email=has_email, has_address=has_address,
+            )
             industry_breakdown = None
             if is_all_industry(industry):
                 industry_breakdown = get_industry_breakdown(
                     db,
                     search=search,
                     filter_status=status,
+                    name_zh=name_zh, name_en=name_en, company=company, position=position,
+                    date_from=date_from, date_to=date_to,
+                    has_phone=has_phone, has_email=has_email, has_address=has_address,
                 )
             return ResponseHandler.success(
                 data={
@@ -300,13 +426,22 @@ async def crop_preview(
             )
 
         temp_output_path = result["output_path"]
-        cropped_preview_base64 = image_file_to_data_url(temp_output_path)
+
+        # 將裁切結果搬到 uploads 目錄保留，供保存時直接使用
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        preview_filename = f"preview_cropped_{timestamp}.jpg"
+        preview_saved_path = os.path.join(UPLOAD_DIR, preview_filename)
+        shutil.move(temp_output_path, preview_saved_path)
+        temp_output_path = None  # 已搬移，不需要 finally 清理
+
+        cropped_preview_base64 = image_file_to_data_url(preview_saved_path)
 
         return ResponseHandler.success(
             data={
                 "detected": result.get("detected", False),
                 "corners": result.get("corners"),
                 "cropped_preview_base64": cropped_preview_base64,
+                "cropped_temp_path": preview_saved_path,
                 "detection_method": result.get("detection_method", "unknown")
             },
             message="裁切預覽成功"
@@ -318,12 +453,12 @@ async def crop_preview(
             status_code=500
         )
     finally:
-        for path in [temp_input_path, temp_output_path]:
-            if path and os.path.exists(path):
-                try:
-                    os.remove(path)
-                except Exception:
-                    pass
+        # 只清理輸入暫存檔，裁切結果已搬到 uploads
+        if temp_input_path and os.path.exists(temp_input_path):
+            try:
+                os.remove(temp_input_path)
+            except Exception:
+                pass
 
 
 @router.put("/{card_id}/crop")
@@ -457,11 +592,14 @@ async def add_card(
     back_image: Optional[UploadFile] = File(None),
     front_crop_corners: Optional[str] = Form(None),
     back_crop_corners: Optional[str] = Form(None),
+    front_image_source: Optional[str] = Form(None),
+    back_image_source: Optional[str] = Form(None),
+    front_cropped_temp_path: Optional[str] = Form(None),
+    back_cropped_temp_path: Optional[str] = Form(None),
     front_ocr_text: Optional[str] = Form(None),
     back_ocr_text: Optional[str] = Form(None),
 
     db: Session = Depends(get_db),
-    current_user: str = Depends(get_current_user)
 ):
     """
     創建新名片，支持圖片上傳和OCR數據
@@ -479,28 +617,32 @@ async def add_card(
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             front_filename = f"front_{timestamp}_{front_image.filename}"
             front_image_path = os.path.join(UPLOAD_DIR, front_filename)
-            
+
             with open(front_image_path, "wb") as buffer:
                 shutil.copyfileobj(front_image.file, buffer)
 
-            front_cropped_image_path, final_front_crop_corners = generate_cropped_image(
+            front_cropped_image_path, final_front_crop_corners = _crop_image_by_source(
                 original_image_path=front_image_path,
                 upload_prefix="front",
-                crop_corners=front_crop_corners
+                crop_corners=front_crop_corners,
+                image_source=front_image_source,
+                cropped_temp_path=front_cropped_temp_path
             )
-        
+
         if back_image and back_image.filename:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             back_filename = f"back_{timestamp}_{back_image.filename}"
             back_image_path = os.path.join(UPLOAD_DIR, back_filename)
-            
+
             with open(back_image_path, "wb") as buffer:
                 shutil.copyfileobj(back_image.file, buffer)
 
-            back_cropped_image_path, final_back_crop_corners = generate_cropped_image(
+            back_cropped_image_path, final_back_crop_corners = _crop_image_by_source(
                 original_image_path=back_image_path,
                 upload_prefix="back",
-                crop_corners=back_crop_corners
+                crop_corners=back_crop_corners,
+                image_source=back_image_source,
+                cropped_temp_path=back_cropped_temp_path
             )
         
         # 創建名片數據對象
@@ -785,6 +927,18 @@ def remove_card(card_id: int, db: Session = Depends(get_db), current_user: str =
                 status_code=404
             )
         
+        # 刪除相關圖片檔案
+        image_fields = ['front_image_path', 'back_image_path',
+                        'front_cropped_image_path', 'back_cropped_image_path']
+        for field in image_fields:
+            path = card.get(field)
+            if path and os.path.exists(path):
+                try:
+                    os.remove(path)
+                    logger.info(f"已刪除圖片: {path}")
+                except Exception as e:
+                    logger.warning(f"刪除圖片失敗 {path}: {e}")
+
         if not delete_card(db, card_id):
             return ResponseHandler.error(
                 message="刪除名片失敗",
@@ -809,21 +963,37 @@ def export_cards(
     search: Optional[str] = Query(None, description="搜索關鍵詞"),
     industry: Optional[str] = Query(None, description="產業分類篩選"),
     status: Optional[str] = Query(None, description="狀態篩選: all / normal / problem"),
+    # 高級篩選
+    name_zh: Optional[str] = Query(None, description="中文姓名篩選"),
+    name_en: Optional[str] = Query(None, description="英文姓名篩選"),
+    company: Optional[str] = Query(None, description="公司篩選"),
+    position: Optional[str] = Query(None, description="職位篩選"),
+    date_from: Optional[str] = Query(None, description="導入日期起 (YYYY-MM-DD)"),
+    date_to: Optional[str] = Query(None, description="導入日期迄 (YYYY-MM-DD)"),
+    has_phone: Optional[bool] = Query(None, description="有無電話"),
+    has_email: Optional[bool] = Query(None, description="有無Email"),
+    has_address: Optional[bool] = Query(None, description="有無地址"),
     db: Session = Depends(get_db),
     current_user: str = Depends(get_current_user)
 ):
-    """匯出名片數據，支持篩選條件"""
+    """匯出名片數據，支持篩選條件（含高級篩選）"""
     try:
         logger.info(f"開始匯出，格式: {format}, search={search}, industry={industry}, status={status}")
 
         # 有篩選條件時用分頁查詢（不限筆數），否則取全部
-        has_filter = search or (industry and industry != '全部') or (status and status != 'all')
+        has_filter = (search or (industry and industry != '全部') or (status and status != 'all')
+                      or name_zh or name_en or company or position
+                      or date_from or date_to
+                      or has_phone is not None or has_email is not None or has_address is not None)
         if has_filter:
             cards, total = get_cards_paginated(
                 db, skip=0, limit=999999,
                 search=search,
                 industry=industry if industry and industry != '全部' else None,
-                filter_status=status if status and status != 'all' else None
+                filter_status=status if status and status != 'all' else None,
+                name_zh=name_zh, name_en=name_en, company=company, position=position,
+                date_from=date_from, date_to=date_to,
+                has_phone=has_phone, has_email=has_email, has_address=has_address,
             )
         else:
             cards = get_cards(db)
