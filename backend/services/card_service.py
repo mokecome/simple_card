@@ -483,6 +483,8 @@ def get_card(db: Session, card_id: int) -> dict:
         card_dict['updated_at'] = card_dict['updated_at'].isoformat()
     if card_dict.get('classified_at'):
         card_dict['classified_at'] = card_dict['classified_at'].isoformat()
+    if card_dict.get('reviewed_at'):
+        card_dict['reviewed_at'] = card_dict['reviewed_at'].isoformat()
 
     return card_dict
 
