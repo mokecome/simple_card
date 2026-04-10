@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Button, Checkbox, Dialog, Toast, NavBar, SpinLoading } from 'antd-mobile';
-import { LeftOutline, RightOutline } from 'antd-mobile-icons';
+import { Button, Checkbox, Dialog, Toast, NavBar, SpinLoading, ImageViewer } from 'antd-mobile';
+import { LeftOutline, RightOutline, EyeOutline } from 'antd-mobile-icons';
 import axios from 'axios';
 import './DuplicateComparePage.css';
 
@@ -191,6 +191,8 @@ export default function DuplicateComparePage() {
                 <img
                   src={getImageUrl(card.front_cropped_image_path || card.front_image_path)}
                   alt="正面"
+                  style={{ cursor: 'pointer' }}
+                  onClick={() => ImageViewer.show({ image: getImageUrl(card.front_cropped_image_path || card.front_image_path) })}
                   onError={(e) => { e.target.style.display = 'none'; }}
                 />
               ) : (
@@ -202,6 +204,8 @@ export default function DuplicateComparePage() {
                 <img
                   src={getImageUrl(card.back_cropped_image_path || card.back_image_path)}
                   alt="背面"
+                  style={{ cursor: 'pointer' }}
+                  onClick={() => ImageViewer.show({ image: getImageUrl(card.back_cropped_image_path || card.back_image_path) })}
                   onError={(e) => { e.target.style.display = 'none'; }}
                 />
               ) : (
@@ -218,7 +222,14 @@ export default function DuplicateComparePage() {
               {card.company_phone1 && <div><span className="label">電話:</span>{card.company_phone1}</div>}
             </div>
 
-            <div style={{ marginTop: '12px', textAlign: 'right' }}>
+            <div style={{ marginTop: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Button
+                size="mini"
+                fill="outline"
+                onClick={() => navigate(`/cards/${card.id}`)}
+              >
+                <EyeOutline /> 查看詳情
+              </Button>
               <Checkbox
                 checked={selectedForDelete.has(card.id)}
                 onChange={() => toggleSelect(card.id)}
