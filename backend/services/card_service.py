@@ -317,6 +317,8 @@ def get_cards_paginated(
             card_dict['updated_at'] = card_dict['updated_at'].isoformat()
         if card_dict.get('classified_at'):
             card_dict['classified_at'] = card_dict['classified_at'].isoformat()
+        if card_dict.get('reviewed_at'):
+            card_dict['reviewed_at'] = card_dict['reviewed_at'].isoformat()
 
         card_dict['duplicate_count'] = dup_counts.get(card_orm.duplicate_group_id, 0)
 
