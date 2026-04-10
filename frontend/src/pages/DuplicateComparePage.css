@@ -1,0 +1,111 @@
+.duplicate-compare-page {
+  min-height: 100vh;
+  background: #f5f5f5;
+  padding-bottom: 80px;
+}
+
+.duplicate-header {
+  background: #fff;
+  padding: 16px;
+  border-bottom: 1px solid #eee;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.duplicate-group-info {
+  font-size: 14px;
+  color: #666;
+  padding: 8px 16px;
+  background: #fff;
+  border-bottom: 1px solid #eee;
+}
+
+.duplicate-card-list {
+  padding: 12px 16px;
+}
+
+.duplicate-card-item {
+  background: #fff;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.duplicate-card-item.selected-for-delete {
+  border: 2px solid #ff4d4f;
+  background: #fff2f0;
+}
+
+.duplicate-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.duplicate-card-id {
+  font-size: 13px;
+  color: #999;
+}
+
+.duplicate-card-date {
+  font-size: 12px;
+  color: #bbb;
+}
+
+.duplicate-card-images {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.duplicate-card-images img {
+  width: 48%;
+  max-height: 150px;
+  object-fit: contain;
+  border-radius: 8px;
+  border: 1px solid #eee;
+  background: #fafafa;
+}
+
+.duplicate-card-info {
+  font-size: 14px;
+  color: #333;
+  line-height: 1.6;
+}
+
+.duplicate-card-info .label {
+  color: #999;
+  margin-right: 4px;
+}
+
+.duplicate-bottom-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: #fff;
+  border-top: 1px solid #eee;
+  padding: 12px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  z-index: 10;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 60px 20px;
+  color: #999;
+}
+
+.empty-state-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+}
+
+.empty-state-text {
+  font-size: 16px;
+}

@@ -6,6 +6,7 @@ import ScanUploadPage from './pages/ScanUploadPage';
 import CardManagerPage from './pages/CardManagerPage';
 import AddCardPage from './pages/AddCardPage';
 import CardDetailPage from './pages/CardDetailPage';
+import DuplicateComparePage from './pages/DuplicateComparePage';
 import SpiderPage from './pages/SpiderPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import LoginModal from './components/LoginModal';
@@ -74,7 +75,7 @@ const Home = () => {
       </div>
 
       <div className="home-footer">
-        <p className="home-footer-text">Star-Bit Innovation Co., Ltd.</p>
+        <p className="home-footer-text">STARBIT Innovation Co., Ltd.</p>
       </div>
 
       <LoginModal visible={showLogin} onSuccess={handleLoginSuccess} onClose={() => setShowLogin(false)} />
@@ -90,6 +91,7 @@ function App() {
         <Route path="/scan" element={<ScanUploadPage />} />
         <Route path="/cards" element={<ProtectedRoute><CardManagerPage /></ProtectedRoute>} />
         <Route path="/add-card" element={<ProtectedRoute><AddCardPage /></ProtectedRoute>} />
+        <Route path="/cards/duplicates/:groupId" element={<ProtectedRoute><DuplicateComparePage /></ProtectedRoute>} />
         <Route path="/cards/:id" element={<ProtectedRoute><CardDetailPage /></ProtectedRoute>} />
         <Route path="/spider" element={<ProtectedRoute><SpiderPage /></ProtectedRoute>} />
       </Routes>
