@@ -126,6 +126,9 @@ class CardResponse(CardBase):
     created_at: datetime
     updated_at: datetime
     classified_at: Optional[datetime] = None
+    duplicate_group_id: Optional[str] = None
+    duplicate_count: Optional[int] = None
+    reviewed_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True

@@ -64,6 +64,10 @@ class CardORM(Base):
     classification_reason = Column(Text)                         # 分类理由
     classified_at = Column(DateTime, index=True)                 # 分类时间
 
+    # 重複偵測欄位
+    duplicate_group_id = Column(String(32), index=True)  # md5(name_zh|company_name_zh)
+    reviewed_at = Column(DateTime)                        # 重複審查時間
+
     # 複合索引，優化常見查詢
     __table_args__ = (
         Index('idx_name_company', 'name_zh', 'company_name_zh'),  # 姓名+公司複合索引
@@ -128,4 +132,8 @@ class Card(BaseModel):
     classification_reason: Optional[str] = None   # 分类理由
     classified_at: Optional[datetime.datetime] = None  # 分类时间
 
-    model_config = {"from_attributes": True} 
+    # 重複偵測欄位
+    duplicate_group_id: Optional[str] = None
+    reviewed_at: Optional[datetime.datetime] = None
+
+    model_config = {"from_attributes": True}
