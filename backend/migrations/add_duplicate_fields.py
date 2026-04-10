@@ -11,6 +11,12 @@ import os
 import sys
 
 
+def compute_duplicate_group_id(name_zh, company_name_zh):
+    """計算重複組 ID：md5(name_zh|company_name_zh)"""
+    key = f"{name_zh or ''}|{company_name_zh or ''}"
+    return hashlib.md5(key.encode('utf-8')).hexdigest()
+
+
 def upgrade():
     database_url = os.getenv('DATABASE_URL', 'sqlite:///./cards.db')
     engine = create_engine(database_url)
@@ -48,6 +54,7 @@ def upgrade():
         rows = conn.execute(text("""
             SELECT COALESCE(name_zh, '') AS nz, COALESCE(company_name_zh, '') AS cz, COUNT(*) AS cnt
             FROM cards
+            WHERE NOT (COALESCE(name_zh, '') = '' AND COALESCE(company_name_zh, '') = '')
             GROUP BY COALESCE(name_zh, ''), COALESCE(company_name_zh, '')
             HAVING COUNT(*) > 1
         """)).fetchall()
@@ -58,7 +65,7 @@ def upgrade():
         for row in rows:
             name_zh = row[0]  # already coalesced to ''
             company_name_zh = row[1]
-            group_hash = hashlib.md5(f"{name_zh}|{company_name_zh}".encode('utf-8')).hexdigest()
+            group_hash = compute_duplicate_group_id(name_zh, company_name_zh)
 
             # Update all cards in this group
             # Match using COALESCE to handle both NULL and empty string consistently
