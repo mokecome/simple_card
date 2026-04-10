@@ -1045,7 +1045,7 @@ const CardManagerPage = () => {
               </Tag>
             </div>
           )}
-          {card.duplicate_group_id && (
+          {card.duplicate_group_id && !card.reviewed_at && (
             <div style={{ marginTop: '4px' }}>
               <Tag
                 color="danger"

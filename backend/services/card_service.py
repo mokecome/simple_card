@@ -285,7 +285,7 @@ def get_cards_paginated(
         elif filter_status == "normal":
             query = query.filter(~problem_condition)
     elif filter_status == "duplicate":
-        query = query.filter(CardORM.duplicate_group_id.isnot(None))
+        query = query.filter(CardORM.duplicate_group_id.isnot(None), CardORM.reviewed_at.is_(None))
 
     # 獲取總數
     total = query.count()
@@ -459,7 +459,7 @@ def get_industry_breakdown(
         else:
             query = query.filter(~problem_condition)
     elif filter_status == "duplicate":
-        query = query.filter(CardORM.duplicate_group_id.isnot(None))
+        query = query.filter(CardORM.duplicate_group_id.isnot(None), CardORM.reviewed_at.is_(None))
 
     query = query.group_by(CardORM.industry_category)
     rows = query.all()
