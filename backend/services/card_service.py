@@ -3,6 +3,38 @@ from sqlalchemy.orm import Session
 from typing import Dict, Iterator, List, Optional, Tuple
 from sqlalchemy import and_, or_, func
 import datetime
+import hashlib
+
+
+def compute_duplicate_group_id(name_zh: str, company_name_zh: str) -> str:
+    """計算重複組 ID：md5(name_zh|company_name_zh)"""
+    key = f"{name_zh or ''}|{company_name_zh or ''}"
+    return hashlib.md5(key.encode('utf-8')).hexdigest()
+
+
+def update_duplicate_group(db: Session, name_zh: str, company_name_zh: str):
+    """更新指定 name_zh + company_name_zh 組合的重複標記"""
+    if not name_zh:
+        return
+
+    group_id = compute_duplicate_group_id(name_zh, company_name_zh)
+
+    query = db.query(CardORM).filter(CardORM.name_zh == name_zh)
+    if company_name_zh:
+        query = query.filter(CardORM.company_name_zh == company_name_zh)
+    else:
+        query = query.filter(or_(CardORM.company_name_zh.is_(None), CardORM.company_name_zh == ""))
+
+    cards_in_group = query.all()
+
+    if len(cards_in_group) > 1:
+        for card in cards_in_group:
+            card.duplicate_group_id = group_id
+            card.reviewed_at = None
+    else:
+        for card in cards_in_group:
+            card.duplicate_group_id = None
+            card.reviewed_at = None
 
 def get_cards(db: Session) -> List[dict]:
     """獲取所有名片（保留舊版本兼容性）"""
@@ -84,7 +116,17 @@ def get_cards_paginated(
     limit: int = 100,
     search: Optional[str] = None,
     industry: Optional[str] = None,
-    filter_status: Optional[str] = None
+    filter_status: Optional[str] = None,
+    # 高級篩選參數
+    name_zh: Optional[str] = None,
+    name_en: Optional[str] = None,
+    company: Optional[str] = None,
+    position: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    has_phone: Optional[bool] = None,
+    has_email: Optional[bool] = None,
+    has_address: Optional[bool] = None,
 ) -> Tuple[List[dict], int]:
     """分頁獲取名片，支持搜索和過濾"""
     query = db.query(CardORM)
@@ -114,6 +156,73 @@ def get_cards_paginated(
             CardORM.classification_reason.contains(search),
         )
         query = query.filter(search_filter)
+
+    # === 高級篩選 ===
+    if name_zh:
+        query = query.filter(CardORM.name_zh.contains(name_zh))
+    if name_en:
+        query = query.filter(CardORM.name_en.contains(name_en))
+    if company:
+        query = query.filter(or_(
+            CardORM.company_name_zh.contains(company),
+            CardORM.company_name_en.contains(company),
+        ))
+    if position:
+        query = query.filter(or_(
+            CardORM.position_zh.contains(position),
+            CardORM.position_en.contains(position),
+            CardORM.position1_zh.contains(position),
+            CardORM.position1_en.contains(position),
+        ))
+
+    # 日期區間篩選
+    if date_from:
+        try:
+            dt_from = datetime.datetime.strptime(date_from, "%Y-%m-%d")
+            query = query.filter(CardORM.created_at >= dt_from)
+        except ValueError:
+            pass
+    if date_to:
+        try:
+            dt_to = datetime.datetime.strptime(date_to, "%Y-%m-%d") + datetime.timedelta(days=1)
+            query = query.filter(CardORM.created_at < dt_to)
+        except ValueError:
+            pass
+
+    # 聯絡方式篩選
+    def is_empty(col):
+        return or_(col.is_(None), col == "")
+    def is_not_empty(col):
+        return and_(col.isnot(None), col != "")
+
+    if has_phone is True:
+        query = query.filter(or_(
+            is_not_empty(CardORM.mobile_phone),
+            is_not_empty(CardORM.company_phone1),
+            is_not_empty(CardORM.company_phone2),
+        ))
+    elif has_phone is False:
+        query = query.filter(and_(
+            is_empty(CardORM.mobile_phone),
+            is_empty(CardORM.company_phone1),
+            is_empty(CardORM.company_phone2),
+        ))
+
+    if has_email is True:
+        query = query.filter(is_not_empty(CardORM.email))
+    elif has_email is False:
+        query = query.filter(is_empty(CardORM.email))
+
+    if has_address is True:
+        query = query.filter(or_(
+            is_not_empty(CardORM.company_address1_zh),
+            is_not_empty(CardORM.company_address2_zh),
+        ))
+    elif has_address is False:
+        query = query.filter(and_(
+            is_empty(CardORM.company_address1_zh),
+            is_empty(CardORM.company_address2_zh),
+        ))
 
     # 狀態過濾（normal / problem）
     if filter_status in ("normal", "problem"):
@@ -175,17 +284,31 @@ def get_cards_paginated(
             query = query.filter(problem_condition)
         elif filter_status == "normal":
             query = query.filter(~problem_condition)
-    
+    elif filter_status == "duplicate":
+        query = query.filter(CardORM.duplicate_group_id.isnot(None))
+
     # 獲取總數
     total = query.count()
     
     # 分頁查詢
-    cards = query.order_by(CardORM.created_at.desc()).offset(skip).limit(limit).all()
-    
+    cards_page = query.order_by(CardORM.created_at.desc()).offset(skip).limit(limit).all()
+
+    # 批次取得重複數量
+    group_ids = list(set(c.duplicate_group_id for c in cards_page if c.duplicate_group_id))
+    if group_ids:
+        dup_counts = dict(
+            db.query(CardORM.duplicate_group_id, func.count(CardORM.id))
+            .filter(CardORM.duplicate_group_id.in_(group_ids))
+            .group_by(CardORM.duplicate_group_id)
+            .all()
+        )
+    else:
+        dup_counts = {}
+
     # 轉換為字典
     result = []
-    for card in cards:
-        card_dict = card.__dict__.copy()
+    for card_orm in cards_page:
+        card_dict = card_orm.__dict__.copy()
         card_dict.pop('_sa_instance_state', None)
 
         if card_dict.get('created_at'):
@@ -195,6 +318,8 @@ def get_cards_paginated(
         if card_dict.get('classified_at'):
             card_dict['classified_at'] = card_dict['classified_at'].isoformat()
 
+        card_dict['duplicate_count'] = dup_counts.get(card_orm.duplicate_group_id, 0)
+
         result.append(card_dict)
 
     return result, total
@@ -203,9 +328,19 @@ def get_industry_breakdown(
     db: Session,
     search: Optional[str] = None,
     filter_status: Optional[str] = None,
+    # 高級篩選參數
+    name_zh: Optional[str] = None,
+    name_en: Optional[str] = None,
+    company: Optional[str] = None,
+    position: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    has_phone: Optional[bool] = None,
+    has_email: Optional[bool] = None,
+    has_address: Optional[bool] = None,
 ) -> Dict[str, int]:
     """
-    在目前條件（search + status）下，各 industry_category 的數量
+    在目前條件（search + status + 高級篩選）下，各 industry_category 的數量
     """
     query = db.query(
         CardORM.industry_category,
@@ -229,11 +364,70 @@ def get_industry_breakdown(
         )
         query = query.filter(search_filter)
 
+    # === 高級篩選（跟 get_cards_paginated 一致）===
+    if name_zh:
+        query = query.filter(CardORM.name_zh.contains(name_zh))
+    if name_en:
+        query = query.filter(CardORM.name_en.contains(name_en))
+    if company:
+        query = query.filter(or_(
+            CardORM.company_name_zh.contains(company),
+            CardORM.company_name_en.contains(company),
+        ))
+    if position:
+        query = query.filter(or_(
+            CardORM.position_zh.contains(position),
+            CardORM.position_en.contains(position),
+            CardORM.position1_zh.contains(position),
+            CardORM.position1_en.contains(position),
+        ))
+    if date_from:
+        try:
+            dt_from = datetime.datetime.strptime(date_from, "%Y-%m-%d")
+            query = query.filter(CardORM.created_at >= dt_from)
+        except ValueError:
+            pass
+    if date_to:
+        try:
+            dt_to = datetime.datetime.strptime(date_to, "%Y-%m-%d") + datetime.timedelta(days=1)
+            query = query.filter(CardORM.created_at < dt_to)
+        except ValueError:
+            pass
+
+    def is_empty(col):
+        return or_(col.is_(None), col == "")
+    def is_not_empty(col):
+        return and_(col.isnot(None), col != "")
+
+    if has_phone is True:
+        query = query.filter(or_(
+            is_not_empty(CardORM.mobile_phone),
+            is_not_empty(CardORM.company_phone1),
+            is_not_empty(CardORM.company_phone2),
+        ))
+    elif has_phone is False:
+        query = query.filter(and_(
+            is_empty(CardORM.mobile_phone),
+            is_empty(CardORM.company_phone1),
+            is_empty(CardORM.company_phone2),
+        ))
+    if has_email is True:
+        query = query.filter(is_not_empty(CardORM.email))
+    elif has_email is False:
+        query = query.filter(is_empty(CardORM.email))
+    if has_address is True:
+        query = query.filter(or_(
+            is_not_empty(CardORM.company_address1_zh),
+            is_not_empty(CardORM.company_address2_zh),
+        ))
+    elif has_address is False:
+        query = query.filter(and_(
+            is_empty(CardORM.company_address1_zh),
+            is_empty(CardORM.company_address2_zh),
+        ))
+
     # 狀態條件（跟 get_cards_paginated 一致）
     if filter_status in ("normal", "problem"):
-        def is_empty(col):
-            return or_(col.is_(None), col == "")
-
         name_missing = and_(is_empty(CardORM.name_zh), is_empty(CardORM.name_en))
         company_missing = and_(is_empty(CardORM.company_name_zh), is_empty(CardORM.company_name_en))
 
@@ -293,7 +487,12 @@ def create_card(db: Session, card: Card) -> dict:
     db.add(db_card)
     db.commit()
     db.refresh(db_card)
-    
+
+    # 更新重複組標記
+    update_duplicate_group(db, db_card.name_zh, db_card.company_name_zh)
+    db.commit()
+    db.refresh(db_card)
+
     # 轉換為字典格式，處理datetime序列化
     card_dict = Card.model_validate(db_card).model_dump()
     for key in card_dict:
@@ -335,9 +534,17 @@ def delete_card(db: Session, card_id: int) -> bool:
     db_card = db.query(CardORM).filter(CardORM.id == card_id).first()
     if not db_card:
         return False
+
+    name_zh = db_card.name_zh
+    company_name_zh = db_card.company_name_zh
+
     try:
         db.delete(db_card)
         db.commit()
+
+        update_duplicate_group(db, name_zh, company_name_zh)
+        db.commit()
+
         return True
     except Exception as e:
         db.rollback()
@@ -408,3 +615,64 @@ def get_cards_count(db: Session, search: Optional[str] = None) -> int:
         query = query.filter(search_filter)
     
     return query.scalar()
+
+
+def get_duplicate_groups(db: Session, skip: int = 0, limit: int = 1) -> Tuple[List[dict], int]:
+    """取得待處理的重複組別（組內至少有一張 reviewed_at 為 NULL）"""
+
+    subquery = db.query(
+        CardORM.duplicate_group_id,
+    ).filter(
+        CardORM.duplicate_group_id.isnot(None),
+        CardORM.reviewed_at.is_(None),
+    ).group_by(
+        CardORM.duplicate_group_id,
+    ).subquery()
+
+    total_groups = db.query(func.count()).select_from(subquery).scalar()
+
+    group_ids_query = db.query(subquery.c.duplicate_group_id).offset(skip).limit(limit)
+    group_ids = [row[0] for row in group_ids_query.all()]
+
+    groups = []
+    for group_id in group_ids:
+        cards = db.query(CardORM).filter(
+            CardORM.duplicate_group_id == group_id
+        ).order_by(CardORM.created_at.asc()).all()
+
+        if cards:
+            card_dicts = []
+            for card in cards:
+                card_dict = Card.model_validate(card).model_dump()
+                card_dict['id'] = card.id
+                for key in card_dict:
+                    if hasattr(card_dict[key], 'isoformat'):
+                        card_dict[key] = card_dict[key].isoformat()
+                card_dicts.append(card_dict)
+
+            groups.append({
+                "group_id": group_id,
+                "name_zh": cards[0].name_zh,
+                "company_name_zh": cards[0].company_name_zh or "",
+                "cards": card_dicts,
+                "count": len(cards),
+            })
+
+    return groups, total_groups
+
+
+def review_duplicate_group(db: Session, group_id: str) -> bool:
+    """標記該重複組為已審查（全部保留）"""
+    cards = db.query(CardORM).filter(
+        CardORM.duplicate_group_id == group_id
+    ).all()
+
+    if not cards:
+        return False
+
+    now = datetime.datetime.utcnow()
+    for card in cards:
+        card.reviewed_at = now
+
+    db.commit()
+    return True
