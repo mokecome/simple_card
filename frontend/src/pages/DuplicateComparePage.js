@@ -2,19 +2,16 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button, Checkbox, Dialog, Toast, NavBar, SpinLoading } from 'antd-mobile';
 import { LeftOutline, RightOutline } from 'antd-mobile-icons';
-import apiClient from '../utils/apiClient';
+import axios from 'axios';
 import './DuplicateComparePage.css';
-
-const API_BASE = process.env.REACT_APP_API_BASE || '';
 
 function getImageUrl(path) {
   if (!path) return null;
-  if (path.startsWith('card_data/')) return `${API_BASE}/static/${path}`;
+  if (path.startsWith('card_data/')) return `/static/${path}`;
   if (path.startsWith('output/card_images/')) {
-    const filename = path.split('/').pop();
-    return `${API_BASE}/static/uploads/${filename}`;
+    return `/static/uploads/${path.replace('output/card_images/', '')}`;
   }
-  return `${API_BASE}/static/${path}`;
+  return path;
 }
 
 export default function DuplicateComparePage() {
@@ -31,12 +28,13 @@ export default function DuplicateComparePage() {
     setLoading(true);
     setSelectedForDelete(new Set());
     try {
-      const data = await apiClient.get('/api/v1/cards/duplicates', {
+      const res = await axios.get('/api/v1/cards/duplicates', {
         params: { skip: index, limit: 1 }
       });
-      if (data) {
-        setGroups(data.groups || []);
-        setTotalGroups(data.total_groups || 0);
+      const resData = res.data;
+      if (resData?.success && resData.data) {
+        setGroups(resData.data.groups || []);
+        setTotalGroups(resData.data.total_groups || 0);
         setCurrentIndex(index);
       }
     } catch (err) {
@@ -80,7 +78,7 @@ export default function DuplicateComparePage() {
     setDeleting(true);
     try {
       for (const cardId of selectedForDelete) {
-        await apiClient.delete(`/api/v1/cards/${cardId}`);
+        await axios.delete(`/api/v1/cards/${cardId}`);
       }
       Toast.show({ content: `已刪除 ${selectedForDelete.size} 張名片`, icon: 'success' });
       await loadGroup(currentIndex);
@@ -94,7 +92,7 @@ export default function DuplicateComparePage() {
   const handleReview = async () => {
     if (!currentGroup) return;
     try {
-      await apiClient.post(`/api/v1/cards/duplicates/${currentGroup.group_id}/review`);
+      await axios.post(`/api/v1/cards/duplicates/${currentGroup.group_id}/review`);
       Toast.show({ content: '已標記全部保留', icon: 'success' });
       await loadGroup(currentIndex);
     } catch (err) {
