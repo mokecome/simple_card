@@ -378,16 +378,25 @@ const CardManagerPage = () => {
 
     try {
       const currentPageToLoad = isLoadMore ? currentPage + 1 : 0;
-      const response = await axios.get('/api/v1/cards/', {
-        params: {
+      const params = {
           use_pagination: true,
           skip: currentPageToLoad * pageSize,
           limit: pageSize,
           search: searchText || undefined,
-          industry: industryFilter && industryFilter !== '全部' ? industryFilter : undefined, // 產業篩選
-          status: filterStatus !== 'all' ? filterStatus : undefined
-        }
-      });
+          industry: industryFilter && industryFilter !== '全部' ? industryFilter : undefined,
+          status: filterStatus !== 'all' ? filterStatus : undefined,
+          // 高級篩選
+          name_zh: advancedFilters.name_zh || undefined,
+          name_en: advancedFilters.name_en || undefined,
+          company: advancedFilters.company || undefined,
+          position: advancedFilters.position || undefined,
+          date_from: advancedFilters.importDateFrom || undefined,
+          date_to: advancedFilters.importDateTo || undefined,
+          has_phone: advancedFilters.hasPhone !== null ? advancedFilters.hasPhone : undefined,
+          has_email: advancedFilters.hasEmail !== null ? advancedFilters.hasEmail : undefined,
+          has_address: advancedFilters.hasAddress !== null ? advancedFilters.hasAddress : undefined,
+      };
+      const response = await axios.get('/api/v1/cards/', { params });
       
       if (response.data && response.data.success && response.data.data) {
         const { items, total, has_more, industry_stats, industry_breakdown } = response.data.data;
@@ -432,89 +441,15 @@ const CardManagerPage = () => {
     loadGlobalStats(); // 載入全局統計數據
   }, []);
 
-  // 高級篩選邏輯
-  const applyAdvancedFilters = (cards) => {
-    return cards.filter(card => {
-      // 中文姓名篩選
-      if (advancedFilters.name_zh && 
-          !(card.name_zh && card.name_zh.toLowerCase().includes(advancedFilters.name_zh.toLowerCase()))) {
-        return false;
-      }
 
-      // 英文姓名篩選
-      if (advancedFilters.name_en && 
-          !(card.name_en && card.name_en.toLowerCase().includes(advancedFilters.name_en.toLowerCase()))) {
-        return false;
-      }
-
-      // 公司篩選
-      if (advancedFilters.company && 
-          !((card.company_name_zh && card.company_name_zh.toLowerCase().includes(advancedFilters.company.toLowerCase())) ||
-            (card.company_name_en && card.company_name_en.toLowerCase().includes(advancedFilters.company.toLowerCase())))) {
-        return false;
-      }
-
-      // 職位篩選
-      if (advancedFilters.position && 
-          !((card.position_zh && card.position_zh.toLowerCase().includes(advancedFilters.position.toLowerCase())) ||
-            (card.position_en && card.position_en.toLowerCase().includes(advancedFilters.position.toLowerCase())) ||
-            (card.position1_zh && card.position1_zh.toLowerCase().includes(advancedFilters.position.toLowerCase())) ||
-            (card.position1_en && card.position1_en.toLowerCase().includes(advancedFilters.position.toLowerCase())))) {
-        return false;
-      }
-
-      // 導入時間篩選
-      if (advancedFilters.importDateFrom || advancedFilters.importDateTo) {
-        const cardDate = new Date(card.created_at);
-        if (advancedFilters.importDateFrom && cardDate < new Date(advancedFilters.importDateFrom)) {
-          return false;
-        }
-        if (advancedFilters.importDateTo && cardDate > new Date(advancedFilters.importDateTo + ' 23:59:59')) {
-          return false;
-        }
-      }
-
-      // 聯絡方式篩選
-      if (advancedFilters.hasPhone === true && !(card.mobile_phone || card.company_phone1 || card.company_phone2)) {
-        return false;
-      }
-      if (advancedFilters.hasPhone === false && (card.mobile_phone || card.company_phone1 || card.company_phone2)) {
-        return false;
-      }
-
-      if (advancedFilters.hasEmail === true && !card.email) {
-        return false;
-      }
-      if (advancedFilters.hasEmail === false && card.email) {
-        return false;
-      }
-
-      if (advancedFilters.hasAddress === true && !(card.company_address1_zh || card.company_address2_zh)) {
-        return false;
-      }
-      if (advancedFilters.hasAddress === false && (card.company_address1_zh || card.company_address2_zh)) {
-        return false;
-      }
-
-      return true;
-    });
-  };
-
-  // 搜索功能和標籤篩選 - 使用服務器端搜索
+  // 所有篩選條件改變時，重新從後端載入（防抖 300ms）
   useEffect(() => {
-    // 當搜索條件或標籤篩選改變時，重新載入第一頁
     const timeoutId = setTimeout(() => {
       loadCards(false);
-    }, 300); // 防抖300ms
+    }, 300);
 
     return () => clearTimeout(timeoutId);
-  }, [searchText, industryFilter, filterStatus]);
-
-  // 客戶端只做「高級篩選」，狀態交給後端
-  useEffect(() => {
-    let filtered = applyAdvancedFilters(cards);
-    setFilteredCards(filtered);
-  }, [cards, advancedFilters]);
+  }, [searchText, industryFilter, filterStatus, advancedFilters]);
 
   // 刪除名片
   const handleDeleteCard = async (cardId) => {
@@ -567,13 +502,23 @@ const CardManagerPage = () => {
     });
   };
 
-  // 匯出名片（帶篩選條件）
+  // 匯出名片（帶篩選條件，含高級篩選）
   const handleExport = async (format) => {
     try {
       const params = new URLSearchParams({ format });
       if (searchText) params.append('search', searchText);
       if (industryFilter && industryFilter !== '全部') params.append('industry', industryFilter);
       if (filterStatus && filterStatus !== 'all') params.append('status', filterStatus);
+      // 高級篩選
+      if (advancedFilters.name_zh) params.append('name_zh', advancedFilters.name_zh);
+      if (advancedFilters.name_en) params.append('name_en', advancedFilters.name_en);
+      if (advancedFilters.company) params.append('company', advancedFilters.company);
+      if (advancedFilters.position) params.append('position', advancedFilters.position);
+      if (advancedFilters.importDateFrom) params.append('date_from', advancedFilters.importDateFrom);
+      if (advancedFilters.importDateTo) params.append('date_to', advancedFilters.importDateTo);
+      if (advancedFilters.hasPhone !== null) params.append('has_phone', advancedFilters.hasPhone);
+      if (advancedFilters.hasEmail !== null) params.append('has_email', advancedFilters.hasEmail);
+      if (advancedFilters.hasAddress !== null) params.append('has_address', advancedFilters.hasAddress);
 
       const response = await axios.get(`/api/v1/cards/export/download?${params.toString()}`, {
         responseType: 'blob',
@@ -1100,6 +1045,20 @@ const CardManagerPage = () => {
               </Tag>
             </div>
           )}
+          {card.duplicate_group_id && (
+            <div style={{ marginTop: '4px' }}>
+              <Tag
+                color="danger"
+                style={{ fontSize: '12px', cursor: 'pointer' }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  navigate(`/cards/duplicates/${card.duplicate_group_id}`);
+                }}
+              >
+                重複 x{card.duplicate_count || '?'}
+              </Tag>
+            </div>
+          )}
           {(card.department1_zh || card.department2_zh || card.department3_zh) && (
             <div style={{ marginTop: '4px', fontSize: '13px', color: '#666' }}>
               <HighlightText
@@ -1323,6 +1282,14 @@ const CardManagerPage = () => {
               onClick={() => setFilterStatus('problem')}
             >
               有問題 ({globalStats.problem})
+            </Button>
+            <Button
+              color={filterStatus === 'duplicate' ? 'warning' : 'default'}
+              fill={filterStatus === 'duplicate' ? 'solid' : 'outline'}
+              size="small"
+              onClick={() => setFilterStatus('duplicate')}
+            >
+              重複
             </Button>
           </Space>
 
@@ -1631,20 +1598,15 @@ const CardManagerPage = () => {
                       {searchText && `'${searchText}' `}
                       {industryFilter !== '全部' ? (
                         `📊 ${industryFilter}: ${
-                          // ① 有高級篩選 → 前端自己過濾，顯示目前顯示中的數量
-                          Object.values(advancedFilters).some(v => v)
-                            ? filteredCards.length
-                            // ② 沒有高級篩選，但有 search 或 狀態篩選 → 用後端回傳的 total
-                            : (searchText || filterStatus !== 'all'
-                                ? filteredTotal
-                                // ③ 完全沒額外條件 → 顯示全局的產業統計
-                                : (globalStats.industry_stats?.[industryFilter] || 0))
+                          (searchText || filterStatus !== 'all' || Object.values(advancedFilters).some(v => v !== '' && v !== null))
+                            ? filteredTotal
+                            : (globalStats.industry_stats?.[industryFilter] || 0)
                         } 張`
                       ) : (
                         // ✅ 全部產業：如果有 search / status 篩選 → 顯示總數；否則顯示各產業統計
                         (Object.values(advancedFilters).some(v => v) || searchText || filterStatus !== 'all') ? (
                           (() => {
-                            const totalText = `📊 全部產業：${Object.values(advancedFilters).some(v => v) ? filteredCards.length : filteredTotal} 張`;
+                            const totalText = `📊 全部產業：${filteredTotal} 張`;
 
                             const breakdown = formatIndustryBreakdown(filteredIndustryStats);
 
@@ -1664,7 +1626,7 @@ const CardManagerPage = () => {
                       {searchText && `關鍵詞: "${searchText}"`}
                       {industryFilter !== '全部' && (searchText ? ' | ' : '') + `產業: ${industryFilter}`}
                       {Object.values(advancedFilters).some(v => v) && " | 高級篩選"}
-                      {filterStatus !== 'all' && ` | 狀態: ${filterStatus === 'normal' ? '正常' : '有問題'}`}
+                      {filterStatus !== 'all' && ` | 狀態: ${filterStatus === 'normal' ? '正常' : filterStatus === 'duplicate' ? '重複' : '有問題'}`}
                     </span>
                   </div>
                 </div>
