@@ -13,6 +13,7 @@ from backend.services.card_service import (
     iterate_cards_for_stats,
     get_industry_breakdown,
     get_duplicate_groups,
+    get_duplicate_group_by_id,
     review_duplicate_group,
 )
 from backend.services.industry_classification_service import IndustryClassificationService
@@ -177,20 +178,34 @@ def _crop_image_by_source(
 def list_duplicate_groups(
     skip: int = Query(0, ge=0, description="跳過組數"),
     limit: int = Query(1, ge=1, le=50, description="每次取幾組"),
+    group_id: Optional[str] = Query(None, description="指定重複組ID，直接取得該組資料"),
     db: Session = Depends(get_db),
     current_user: str = Depends(get_current_user)
 ):
     """取得待處理的重複名片組別"""
     try:
-        groups, total_groups = get_duplicate_groups(db, skip=skip, limit=limit)
-        return ResponseHandler.success(
-            data={
-                "groups": groups,
-                "total_groups": total_groups,
-                "current_index": skip,
-            },
-            message="取得重複組別成功"
-        )
+        if group_id:
+            # 直接查詢指定組
+            group, total_groups, group_index = get_duplicate_group_by_id(db, group_id)
+            groups = [group] if group else []
+            return ResponseHandler.success(
+                data={
+                    "groups": groups,
+                    "total_groups": total_groups,
+                    "current_index": group_index,
+                },
+                message="取得重複組別成功"
+            )
+        else:
+            groups, total_groups = get_duplicate_groups(db, skip=skip, limit=limit)
+            return ResponseHandler.success(
+                data={
+                    "groups": groups,
+                    "total_groups": total_groups,
+                    "current_index": skip,
+                },
+                message="取得重複組別成功"
+            )
     except Exception as e:
         logger.error(f"取得重複組別失敗: {str(e)}")
         return ResponseHandler.error(message="取得重複組別失敗", error=e, status_code=400)

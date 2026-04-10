@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { Button, Checkbox, Dialog, Toast, NavBar, SpinLoading } from 'antd-mobile';
 import { LeftOutline, RightOutline } from 'antd-mobile-icons';
 import axios from 'axios';
@@ -16,6 +16,7 @@ function getImageUrl(path) {
 
 export default function DuplicateComparePage() {
   const navigate = useNavigate();
+  const { groupId } = useParams();
 
   const [loading, setLoading] = useState(true);
   const [groups, setGroups] = useState([]);
@@ -24,7 +25,7 @@ export default function DuplicateComparePage() {
   const [selectedForDelete, setSelectedForDelete] = useState(new Set());
   const [deleting, setDeleting] = useState(false);
 
-  const loadGroup = useCallback(async (index) => {
+  const loadGroupByIndex = useCallback(async (index) => {
     setLoading(true);
     setSelectedForDelete(new Set());
     try {
@@ -35,7 +36,27 @@ export default function DuplicateComparePage() {
       if (resData?.success && resData.data) {
         setGroups(resData.data.groups || []);
         setTotalGroups(resData.data.total_groups || 0);
-        setCurrentIndex(index);
+        setCurrentIndex(resData.data.current_index ?? index);
+      }
+    } catch (err) {
+      Toast.show({ content: '載入失敗', icon: 'fail' });
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const loadGroupById = useCallback(async (gid) => {
+    setLoading(true);
+    setSelectedForDelete(new Set());
+    try {
+      const res = await axios.get('/api/v1/cards/duplicates', {
+        params: { group_id: gid }
+      });
+      const resData = res.data;
+      if (resData?.success && resData.data) {
+        setGroups(resData.data.groups || []);
+        setTotalGroups(resData.data.total_groups || 0);
+        setCurrentIndex(resData.data.current_index ?? 0);
       }
     } catch (err) {
       Toast.show({ content: '載入失敗', icon: 'fail' });
@@ -45,8 +66,12 @@ export default function DuplicateComparePage() {
   }, []);
 
   useEffect(() => {
-    loadGroup(0);
-  }, [loadGroup]);
+    if (groupId) {
+      loadGroupById(groupId);
+    } else {
+      loadGroupByIndex(0);
+    }
+  }, [groupId, loadGroupById, loadGroupByIndex]);
 
   const currentGroup = groups[0];
 
@@ -81,7 +106,7 @@ export default function DuplicateComparePage() {
         await axios.delete(`/api/v1/cards/${cardId}`);
       }
       Toast.show({ content: `已刪除 ${selectedForDelete.size} 張名片`, icon: 'success' });
-      await loadGroup(currentIndex);
+      await loadGroupByIndex(currentIndex);
     } catch (err) {
       Toast.show({ content: '刪除失敗', icon: 'fail' });
     } finally {
@@ -94,7 +119,7 @@ export default function DuplicateComparePage() {
     try {
       await axios.post(`/api/v1/cards/duplicates/${currentGroup.group_id}/review`);
       Toast.show({ content: '已標記全部保留', icon: 'success' });
-      await loadGroup(currentIndex);
+      await loadGroupByIndex(currentIndex);
     } catch (err) {
       Toast.show({ content: '操作失敗', icon: 'fail' });
     }
@@ -102,13 +127,13 @@ export default function DuplicateComparePage() {
 
   const goNext = () => {
     if (currentIndex < totalGroups - 1) {
-      loadGroup(currentIndex + 1);
+      loadGroupByIndex(currentIndex + 1);
     }
   };
 
   const goPrev = () => {
     if (currentIndex > 0) {
-      loadGroup(currentIndex - 1);
+      loadGroupByIndex(currentIndex - 1);
     }
   };
 

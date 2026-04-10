@@ -674,6 +674,55 @@ def get_duplicate_groups(db: Session, skip: int = 0, limit: int = 1) -> Tuple[Li
     return groups, total_groups
 
 
+def get_duplicate_group_by_id(db: Session, group_id: str) -> Tuple[dict, int, int]:
+    """根據 group_id 取得指定重複組，並回傳該組在所有待處理組中的索引位置"""
+
+    # 取得所有待處理組的 ID 列表（有序）
+    subquery = db.query(
+        CardORM.duplicate_group_id,
+    ).filter(
+        CardORM.duplicate_group_id.isnot(None),
+        CardORM.reviewed_at.is_(None),
+    ).group_by(
+        CardORM.duplicate_group_id,
+    ).subquery()
+
+    all_group_ids = [row[0] for row in db.query(subquery.c.duplicate_group_id).all()]
+    total_groups = len(all_group_ids)
+
+    # 找出目標組的索引
+    group_index = 0
+    if group_id in all_group_ids:
+        group_index = all_group_ids.index(group_id)
+
+    # 取得該組的名片
+    cards = db.query(CardORM).filter(
+        CardORM.duplicate_group_id == group_id
+    ).order_by(CardORM.created_at.asc()).all()
+
+    if not cards:
+        return None, total_groups, 0
+
+    card_dicts = []
+    for card in cards:
+        card_dict = Card.model_validate(card).model_dump()
+        card_dict['id'] = card.id
+        for key in card_dict:
+            if hasattr(card_dict[key], 'isoformat'):
+                card_dict[key] = card_dict[key].isoformat()
+        card_dicts.append(card_dict)
+
+    group = {
+        "group_id": group_id,
+        "name_zh": cards[0].name_zh,
+        "company_name_zh": cards[0].company_name_zh or "",
+        "cards": card_dicts,
+        "count": len(cards),
+    }
+
+    return group, total_groups, group_index
+
+
 def review_duplicate_group(db: Session, group_id: str) -> bool:
     """標記該重複組為已審查（全部保留）"""
     cards = db.query(CardORM).filter(
