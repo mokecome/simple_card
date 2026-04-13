@@ -1,13 +1,17 @@
 """FastAPI backend for Ace-Spider pipeline dashboard."""
 
 import json
+import logging
 import subprocess
 import sys
+from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 from threading import Lock
 
 import yaml
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.cron import CronTrigger
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
@@ -15,12 +19,96 @@ from pydantic import BaseModel
 from utils.config_loader import load_config
 from utils.run_tracker import get_run_summary
 
-app = FastAPI(title="Ace-Spider Dashboard")
+log = logging.getLogger("ace-spider.scheduler")
+
 ROOT_DIR = Path(__file__).resolve().parent
 CONFIG_PATH = ROOT_DIR / "config.yaml"
 _pipeline_lock = Lock()
 _pipeline_process: subprocess.Popen | None = None
 _pipeline_started_at: str | None = None
+
+# --------------- Built-in scheduler ---------------
+_scheduler: BackgroundScheduler | None = None
+SCHEDULER_JOB_ID = "ace_spider_scheduled_pipeline"
+
+
+def _launch_pipeline(log_name: str):
+    """Launch pipeline subprocess. Caller must hold _pipeline_lock."""
+    global _pipeline_process, _pipeline_started_at
+    log_path = ROOT_DIR / "reports" / log_name
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(log_path, "a", encoding="utf-8") as log_file:
+        _pipeline_process = subprocess.Popen(
+            [sys.executable, "main.py", "--all"],
+            cwd=ROOT_DIR,
+            stdout=log_file,
+            stderr=subprocess.STDOUT,
+            start_new_session=True,
+        )
+    _pipeline_started_at = datetime.now().isoformat()
+
+
+def _start_scheduled_pipeline():
+    """Called by APScheduler on cron trigger."""
+    with _pipeline_lock:
+        if _pipeline_is_running():
+            log.info("排程觸發但已有任務執行中，跳過")
+            return
+        _launch_pipeline("pipeline_scheduled_run.log")
+        log.info(f"排程自動抓取已啟動 (PID {_pipeline_process.pid})")
+
+
+def _build_cron_trigger(cron_expr: str) -> CronTrigger:
+    """Parse a 5-field cron expression into an APScheduler CronTrigger."""
+    parts = cron_expr.split()
+    defaults = ["0", "9", "*", "*", "*"]
+    while len(parts) < 5:
+        parts.append(defaults[len(parts)])
+    return CronTrigger(
+        minute=parts[0], hour=parts[1], day=parts[2],
+        month=parts[3], day_of_week=parts[4],
+    )
+
+
+def _init_scheduler():
+    """Create and start the background scheduler from config.yaml."""
+    global _scheduler
+    cfg = load_config()
+    cron_expr = cfg.get("schedule", {}).get("cron", "0 9 * * 1")
+    _scheduler = BackgroundScheduler(daemon=True)
+    _scheduler.add_job(
+        _start_scheduled_pipeline,
+        trigger=_build_cron_trigger(cron_expr),
+        id=SCHEDULER_JOB_ID,
+        name="Ace-Spider Scheduled Pipeline",
+        max_instances=1,
+        coalesce=True,
+        replace_existing=True,
+    )
+    _scheduler.start()
+    log.info(f"內建排程器已啟動 (cron: {cron_expr})")
+
+
+def _reschedule(cron_expr: str):
+    """Update the running scheduler's trigger after config change."""
+    if _scheduler is None:
+        return
+    _scheduler.reschedule_job(
+        SCHEDULER_JOB_ID,
+        trigger=_build_cron_trigger(cron_expr),
+    )
+    log.info(f"排程已更新 (cron: {cron_expr})")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    _init_scheduler()
+    yield
+    if _scheduler:
+        _scheduler.shutdown(wait=False)
+
+
+app = FastAPI(title="Ace-Spider Dashboard", lifespan=lifespan)
 
 
 class ScheduleUpdateRequest(BaseModel):
@@ -172,8 +260,6 @@ def get_control():
 @app.post("/api/control/run-now")
 def run_now():
     """Start the full pipeline in a background subprocess."""
-    global _pipeline_process, _pipeline_started_at
-
     with _pipeline_lock:
         if _pipeline_is_running():
             return {
@@ -181,19 +267,7 @@ def run_now():
                 "message": "Pipeline is already running",
                 **_get_control_state(),
             }
-
-        log_path = ROOT_DIR / "reports" / "pipeline_manual_run.log"
-        log_path.parent.mkdir(parents=True, exist_ok=True)
-        log_file = open(log_path, "a", encoding="utf-8")
-        _pipeline_process = subprocess.Popen(
-            [sys.executable, "main.py", "--all"],
-            cwd=ROOT_DIR,
-            stdout=log_file,
-            stderr=subprocess.STDOUT,
-            start_new_session=True,
-        )
-        log_file.close()  # fd is duplicated into child process
-        _pipeline_started_at = datetime.now().isoformat()
+        _launch_pipeline("pipeline_manual_run.log")
 
     return {
         "ok": True,
@@ -214,6 +288,7 @@ def update_schedule(payload: ScheduleUpdateRequest):
         time_text,
     )
     _write_raw_config(config)
+    _reschedule(schedule_cfg["cron"])
     return {
         "ok": True,
         "message": "Schedule updated",
