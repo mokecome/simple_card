@@ -177,20 +177,15 @@ const CardDetailPage = () => {
       const saveData = new FormData();
       
       // 添加名片資料 - 修復：允許空字符串以支持清空欄位
+      // 排除 crop_corners：裁切由圖片編輯器 (handleEditorSave) 獨立處理，
+      // 純文字保存不應觸發後端重新裁切
+      const skipKeys = ['id', 'created_at', 'updated_at', 'front_crop_corners', 'back_crop_corners'];
       Object.keys(cardData).forEach(key => {
-        if (key !== 'id' && key !== 'created_at' && key !== 'updated_at') {
+        if (!skipKeys.includes(key)) {
           // 使用 || '' 確保空值被轉換為空字符串
           saveData.append(key, cardData[key] || '');
         }
       });
-
-      // 添加暫存的裁切座標
-      if (pendingCrop.front?.corners) {
-        saveData.append('front_crop_corners', JSON.stringify(pendingCrop.front.corners));
-      }
-      if (pendingCrop.back?.corners) {
-        saveData.append('back_crop_corners', JSON.stringify(pendingCrop.back.corners));
-      }
 
       const response = await axios.put(`/api/v1/cards/${id}`, saveData, {
         headers: {
@@ -211,8 +206,7 @@ const CardDetailPage = () => {
         });
         setCardData({ ...processedData });
         setIsEditing(false);
-        setPendingCrop({ front: null, back: null });
-        
+
         Toast.show({
           content: '名片更新成功！',
           position: 'center',
