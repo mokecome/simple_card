@@ -118,7 +118,6 @@ const CardCropEditor = ({
     } else {
       setCropRect(createDefaultRect(imageSize.clientWidth, imageSize.clientHeight));
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible, imageSize]);
 
   const clamp = (val, min, max) => Math.max(min, Math.min(max, val));

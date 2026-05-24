@@ -92,6 +92,21 @@ The system follows a 3-tier architecture:
 **Frontend Components (`frontend/src/components/`):**
 - `CardCropEditor.js`: Interactive crop editor modal — axis-aligned rectangle with 4 draggable corners + 4 edge handles, dark overlay mask outside crop area. Converts between display and natural image coordinates
 
+### Authentication
+
+The system uses JWT-based authentication with a login modal:
+
+- **Login endpoint**: `POST /api/v1/auth/login` — validates credentials, returns JWT token (7-day expiry)
+- **Credentials**: Stored in `.env` (`AUTH_USERNAME`, `AUTH_PASSWORD`, `AUTH_SECRET_KEY`)
+- **Frontend**: `LoginModal` component (antd-mobile Modal) + `ProtectedRoute` wrapper
+- **Token storage**: `localStorage` with `Authorization: Bearer` header via `apiClient.js` interceptor
+- **Protected routes**: `/cards`, `/cards/:id`, `/add-card`, `/spider`
+- **Unprotected routes**: `/` (home), `/scan` (kept open for business users)
+- **Protected API endpoints**: `/api/v1/cards/*` (except `crop-preview`), `/api/v1/spider/*`
+- **Unprotected API endpoints**: `/health`, `/config`, `/api/v1/ocr/*`, `/api/v1/cards/crop-preview`
+- **401 handling**: Frontend clears token and shows LoginModal on 401 response
+- **Direct URL access**: Visiting a protected route while unauthenticated shows the page with LoginModal overlay; login dismisses the modal without redirect
+
 ### Data Flow
 
 1. **Image Capture** → Camera/Upload → Frontend validation
@@ -169,6 +184,9 @@ Key environment variables in `.env`:
 - `MAX_FILE_SIZE=10485760`: 10MB file size limit
 - `USE_CARD_ENHANCEMENT=true`: Enable CardEnhancementService for image preprocessing
 - `USE_OPENCV=true`: Enable CardDetector as fallback
+- `AUTH_USERNAME`: Login username (single account for company use)
+- `AUTH_PASSWORD`: Login password
+- `AUTH_SECRET_KEY`: JWT signing secret key
 
 ## Testing and Quality
 
@@ -198,6 +216,16 @@ Key environment variables in `.env`:
 
 ### Database Migrations
 - Crop fields migration: `backend/migrations/add_cropped_image_fields.py` (adds 4 columns: `front_cropped_image_path`, `back_cropped_image_path`, `front_crop_corners`, `back_crop_corners`)
+
+### Modifying Authentication
+- Login endpoint: `backend/api/v1/auth.py`
+- JWT logic: `backend/services/auth_service.py`
+- Auth dependency: `backend/dependencies/auth.py` → `get_current_user()`
+- Login modal UI: `frontend/src/components/LoginModal.js`
+- Route protection: `frontend/src/components/ProtectedRoute.js`
+- Token utilities: `frontend/src/utils/auth.js`
+- To add new protected routes: wrap with `ProtectedRoute` in `App.js` and add auth dependency in backend
+- To switch to database-based accounts: create `users` table, replace `.env` validation with DB lookup in `auth_service.py`
 
 ### Debugging OCR Issues
 - Check logs in `backend/nohup_backend.log`

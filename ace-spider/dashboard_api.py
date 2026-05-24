@@ -198,19 +198,82 @@ def _resolve_path(file_path: str) -> Path:
     return ROOT_DIR / p
 
 
+def _parse_roc_deadline(deadline_str: str) -> datetime | None:
+    """Parse a ROC-year deadline like '115/04/27   17:00' into a datetime.
+
+    Returns None when the string is empty or unparseable.
+    """
+    if not deadline_str:
+        return None
+    parts = deadline_str.split()
+    if not parts:
+        return None
+    try:
+        y, m, d = parts[0].split("/")
+        year = int(y) + 1911
+        hour, minute = 23, 59
+        if len(parts) > 1:
+            time_parts = parts[1].split(":")
+            hour = int(time_parts[0])
+            minute = int(time_parts[1]) if len(time_parts) > 1 else 0
+        return datetime(year, int(m), int(d), hour, minute)
+    except (ValueError, IndexError):
+        return None
+
+
+def _tender_is_active(tender: dict, now: datetime) -> bool:
+    """Return True when the tender deadline has not passed.
+
+    Tenders with unparseable or missing deadlines stay visible (fail-open),
+    so data quality issues don't silently hide opportunities.
+    """
+    deadline = _parse_roc_deadline(tender.get("deadline", ""))
+    if deadline is None:
+        return True
+    return deadline >= now
+
+
 def _load_stage_data(stage: str) -> dict | None:
-    """Load JSON data for a pipeline stage from the latest run."""
+    """Load merged, active-only tenders for a stage across all historical runs.
+
+    Why: the dashboard previously read only `latest_run.json`, so a scheduled
+    run that only found a few new tenders would make the page look empty even
+    though prior runs' data is still on disk. Merging all `ace_{stage}_*.json`
+    files and filtering by deadline keeps the view = "currently biddable pool".
+    """
     cfg = load_config()
-    data_dir = str(_resolve_path(cfg["output"]["data_dir"]))
-    summary = get_run_summary(data_dir)
-    file_path = summary.get("stages", {}).get(stage)
-    if not file_path:
+    data_dir = _resolve_path(cfg["output"]["data_dir"])
+    files = sorted(data_dir.glob(f"ace_{stage}_*.json"))
+    if not files:
         return None
-    resolved = _resolve_path(file_path)
-    if not resolved.exists():
-        return None
-    with open(resolved, "r", encoding="utf-8") as f:
-        return json.load(f)
+
+    merged_by_id: dict[str, dict] = {}
+    meta: dict = {"crawl_time": None, "keywords_used": []}
+
+    for f in files:
+        try:
+            with open(f, "r", encoding="utf-8") as fh:
+                data = json.load(fh)
+        except (json.JSONDecodeError, OSError):
+            continue
+        if data.get("crawl_time"):
+            meta["crawl_time"] = data["crawl_time"]
+        if data.get("keywords_used"):
+            meta["keywords_used"] = data["keywords_used"]
+        for t in data.get("tenders", []):
+            tid = t.get("tender_id")
+            if tid:
+                merged_by_id[tid] = t
+
+    now = datetime.now()
+    active = [t for t in merged_by_id.values() if _tender_is_active(t, now)]
+
+    return {
+        **meta,
+        "total_found": len(active),
+        "total_historical": len(merged_by_id),
+        "tenders": active,
+    }
 
 
 @app.get("/api/run-state")
@@ -222,27 +285,28 @@ def get_run_state():
 
     stages_info = {}
     for stage in ["crawl", "tagged", "scored", "matched"]:
-        file_path = summary.get("stages", {}).get(stage)
-        resolved = _resolve_path(file_path) if file_path else None
-        if resolved and resolved.exists():
-            with open(resolved, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            tenders = data.get("tenders", [])
-            info = {"file": file_path, "count": len(tenders)}
-
-            if stage == "tagged":
-                info["tagged_count"] = sum(1 for t in tenders if t.get("tag_result"))
-            elif stage == "scored":
-                info["passed_count"] = sum(1 for t in tenders if t.get("passes_filter"))
-                info["avg_fit"] = round(
-                    sum(t.get("fit_score", 0) for t in tenders) / max(len(tenders), 1), 1
-                )
-            elif stage == "matched":
-                info["with_contacts"] = sum(1 for t in tenders if t.get("matched_contacts"))
-
-            stages_info[stage] = info
-        else:
+        data = _load_stage_data(stage)
+        if data is None:
             stages_info[stage] = None
+            continue
+        tenders = data.get("tenders", [])
+        info = {
+            "file": summary.get("stages", {}).get(stage),
+            "count": len(tenders),
+            "total_historical": data.get("total_historical", len(tenders)),
+        }
+
+        if stage == "tagged":
+            info["tagged_count"] = sum(1 for t in tenders if t.get("tag_result"))
+        elif stage == "scored":
+            info["passed_count"] = sum(1 for t in tenders if t.get("passes_filter"))
+            info["avg_fit"] = round(
+                sum(t.get("fit_score", 0) for t in tenders) / max(len(tenders), 1), 1
+            )
+        elif stage == "matched":
+            info["with_contacts"] = sum(1 for t in tenders if t.get("matched_contacts"))
+
+        stages_info[stage] = info
 
     return {
         "run_id": summary.get("run_id"),

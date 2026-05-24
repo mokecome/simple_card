@@ -25,7 +25,7 @@ async def parse_ocr_fields(request: OCRParseRequest):
     智能解析OCR文字到標準化欄位
     """
     try:
-        parsed_fields = ocr_service.parse_ocr_to_fields(request.ocr_text, request.side)
+        parsed_fields = await ocr_service.parse_ocr_to_fields(request.ocr_text, request.side)
         return {
             "success": True, 
             "parsed_fields": parsed_fields,

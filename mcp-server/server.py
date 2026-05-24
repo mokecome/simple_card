@@ -13,6 +13,8 @@ Transport: Streamable HTTP on port 8007 (configurable via MCP_PORT env var).
 from typing import Optional
 
 from mcp.server.fastmcp import FastMCP
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
 
 from config import MCP_PORT
 from tools.contact_tools import (
@@ -37,9 +39,44 @@ mcp = FastMCP(
     "cardocr_mcp",
     host="0.0.0.0",
     port=MCP_PORT,
-    stateless_http=True,
-    json_response=True,
 )
+
+
+class FixAcceptHeaderMiddleware(BaseHTTPMiddleware):
+    """Ensure Accept header includes both required types for MCP streamable-http.
+
+    Some clients (e.g. OpenClaw) only send Accept: text/event-stream,
+    but the MCP SDK requires both application/json and text/event-stream.
+    """
+
+    async def dispatch(self, request: Request, call_next):
+        accept = request.headers.get("accept", "")
+        if "text/event-stream" in accept and "application/json" not in accept:
+            # Mutate the scope headers to add application/json
+            new_accept = f"application/json, {accept}"
+            headers = dict(request.scope["headers"])
+            new_headers = []
+            for k, v in request.scope["headers"]:
+                if k == b"accept":
+                    new_headers.append((k, new_accept.encode()))
+                else:
+                    new_headers.append((k, v))
+            request.scope["headers"] = new_headers
+        return await call_next(request)
+
+
+# Inject middleware into the underlying ASGI app
+mcp._custom_starlette_app = None  # reset any cached app
+_original_create_app = mcp.streamable_http_app
+
+
+def _patched_streamable_http_app():
+    app = _original_create_app()
+    app.add_middleware(FixAcceptHeaderMiddleware)
+    return app
+
+
+mcp.streamable_http_app = _patched_streamable_http_app
 
 
 # ---------------------------------------------------------------------------

@@ -31,6 +31,7 @@ class OCRService:
         self.llm_api = LLMApi()
         # Initialize card enhancement service
         self.card_enhancer = CardEnhancementService()
+        self._llm_semaphore = asyncio.Semaphore(2)
         # Frontend implementation displays 25 fields
         self.CARD_FIELDS = [
             # Basic information (8 fields)
@@ -131,14 +132,16 @@ class OCRService:
 
 注意：請將方括號及其內容替換為實際識別到的資訊，若某欄位沒有內容則填入空字符串""。絕對不要使用上方的範例數據！'''
             print(f"[OCR] Using local OCR API with structured prompt for: {temp_path}")
-            result = self.llm_api.ocr_generate(temp_path, structured_prompt)
-            
+            async with self._llm_semaphore:
+                result = await self.llm_api.async_ocr_generate(temp_path, structured_prompt)
+
             # If original fails, try enhanced image
             if not result or len(result.strip()) < 20:
                 print(f"[OCR] Local OCR result too short, trying enhanced image")
                 enhanced_path = process_image(temp_path)
                 if enhanced_path and enhanced_path != temp_path:
-                    result = self.llm_api.ocr_generate(enhanced_path, structured_prompt)
+                    async with self._llm_semaphore:
+                        result = await self.llm_api.async_ocr_generate(enhanced_path, structured_prompt)
                     # Clean up enhanced image
                     try:
                         os.remove(enhanced_path)
@@ -158,7 +161,7 @@ class OCRService:
             return "Please wait for processing"
     
 
-    def parse_ocr_to_fields(self, ocr_text: str, side: str) -> Dict[str, str]:
+    async def parse_ocr_to_fields(self, ocr_text: str, side: str) -> Dict[str, str]:
         """Parse OCR text to standard fields"""
         try:
             print(f"[DEBUG] Starting OCR field parsing for side: {side}")
@@ -249,7 +252,8 @@ Note: Replace the brackets and their content with actual information from the OC
 Please parse the following OCR text and return only JSON format: ''' + ocr_text
             
             print(f"[DEBUG] OCR parsing prompt: {prompt[:200]}...")
-            result = self.llm_api.ocr_generate("", prompt)
+            async with self._llm_semaphore:
+                result = await self.llm_api.async_ocr_generate("", prompt)
             print(f"[DEBUG] LLM returned result: {result[:300]}...")
             
             # Try to parse JSON result
@@ -826,54 +830,68 @@ def get_session_status(session_id: str) -> Dict[str, Any]:
 class LLMApi:
     def __init__(self, model_path="/data1/models/OpenGVLab/InternVL3-8B"):
         self.model_path = model_path
+        self.base_url = os.getenv("OCR_API_URL", "http://0.0.0.0:23333/v1")
+        self.api_key = os.getenv("OCR_API_KEY", "YOUR_API_KEY")
+        self.timeout = 45.0
+        self._model_name = None
         self.client = OpenAI(
-            api_key=os.getenv("OCR_API_KEY", "YOUR_API_KEY"), 
-            base_url=os.getenv("OCR_API_URL", "http://0.0.0.0:23333/v1"),
-            timeout=60.0,  # 60 seconds timeout
-            max_retries=2
+            api_key=self.api_key,
+            base_url=self.base_url,
+            timeout=60.0,
+            max_retries=1
         )
 
-    def ocr_generate(self, image_path, prompt="Only return the OCR result and don't provide any other explanations.", max_retries=3):
+    async def _get_model_name(self) -> str:
+        """Get and cache model name - only calls API once"""
+        if self._model_name:
+            return self._model_name
+        import httpx
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(f"{self.base_url}/models")
+            resp.raise_for_status()
+            data = resp.json()
+            if data.get("data"):
+                self._model_name = data["data"][0]["id"]
+                return self._model_name
+        raise Exception("No models available from LLM server")
+
+    async def async_ocr_generate(self, image_path, prompt="Only return the OCR result and don't provide any other explanations.", max_retries=2):
+        """Async version of ocr_generate - non-blocking"""
+        import httpx
+
         for attempt in range(max_retries):
             try:
-                # Check if image path exists and is valid
-                if not image_path or not os.path.exists(image_path):
+                if image_path and not os.path.exists(image_path):
                     print(f"[OCR ERROR] Image path does not exist: {image_path}")
                     return "OCR錯誤: 圖片路徑不存在或無效"
-                
-                image_url = f"{os.path.abspath(image_path)}"
-                print(f"[OCR DEBUG] Processing image (attempt {attempt + 1}/{max_retries}): {image_url}")
-                
-                # Get model list with timeout handling
-                try:
-                    models = self.client.models.list()
-                    if not models.data:
-                        print("[OCR ERROR] No models available")
-                        return "OCR錯誤: 沒有可用的模型"
-                        
-                    model_name = models.data[0].id
-                    print(f"[OCR DEBUG] Using model: {model_name}")
-                except Exception as model_error:
-                    print(f"[OCR ERROR] Failed to get models: {model_error}")
-                    if attempt < max_retries - 1:
-                        continue
-                    return f"OCR錯誤: 無法獲取模型列表 - {str(model_error)}"
-                
-                # Make OCR request with proper error handling
-                response = self.client.chat.completions.create(
-                    model=model_name,
-                    messages=[{
-                        'role': 'user',
-                        'content': [{'type': 'text', 'text': prompt}, {'type': 'image_url', 'image_url': {'url': image_url}}]
-                    }],
-                    temperature=0,
-                    timeout=45.0  # Per-request timeout
-                )
-                
-                result = response.choices[0].message.content
+
+                model_name = await self._get_model_name()
+                print(f"[OCR DEBUG] Async processing (attempt {attempt + 1}/{max_retries}), model: {model_name}")
+
+                content = [{'type': 'text', 'text': prompt}]
+                if image_path:
+                    image_url = os.path.abspath(image_path)
+                    content.append({'type': 'image_url', 'image_url': {'url': image_url}})
+
+                payload = {
+                    "model": model_name,
+                    "messages": [{"role": "user", "content": content}],
+                    "temperature": 0
+                }
+
+                async with httpx.AsyncClient(timeout=httpx.Timeout(self.timeout)) as client:
+                    resp = await client.post(
+                        f"{self.base_url}/chat/completions",
+                        json=payload,
+                        headers={"Authorization": f"Bearer {self.api_key}"}
+                    )
+                    resp.raise_for_status()
+                    data = resp.json()
+
+                result = data["choices"][0]["message"]["content"]
                 if result and len(result.strip()) > 0:
-                    print(f"[OCR SUCCESS] OCR result length: {len(result)}")
-                    if len(result) > 100:  # Show preview for long results
+                    print(f"[OCR SUCCESS] Async OCR result length: {len(result)}")
+                    if len(result) > 100:
                         print(f"[OCR PREVIEW] {result[:100]}...")
                     return result.strip()
                 else:
@@ -881,16 +899,74 @@ class LLMApi:
                     if attempt < max_retries - 1:
                         continue
                     return "OCR錯誤: 識別結果為空"
-                
+
+            except Exception as e:
+                print(f"[OCR ERROR] Async API call failed on attempt {attempt + 1}: {e}")
+                print(f"[OCR ERROR] Exception type: {type(e).__name__}")
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(1)
+                    continue
+                return f"OCR識別失敗: {str(e)}"
+
+        return "OCR錯誤: 所有重試均失敗"
+
+    def ocr_generate(self, image_path, prompt="Only return the OCR result and don't provide any other explanations.", max_retries=3):
+        """Sync version - kept for batch processing and parse_ocr_to_fields fallback"""
+        for attempt in range(max_retries):
+            try:
+                if image_path and not os.path.exists(image_path):
+                    print(f"[OCR ERROR] Image path does not exist: {image_path}")
+                    return "OCR錯誤: 圖片路徑不存在或無效"
+
+                image_url = f"{os.path.abspath(image_path)}" if image_path else ""
+                print(f"[OCR DEBUG] Processing image (attempt {attempt + 1}/{max_retries}): {image_url}")
+
+                if not self._model_name:
+                    try:
+                        models = self.client.models.list()
+                        if models.data:
+                            self._model_name = models.data[0].id
+                    except Exception as e:
+                        print(f"[OCR ERROR] Failed to get models: {e}")
+                        if attempt < max_retries - 1:
+                            continue
+                        return f"OCR錯誤: 無法獲取模型列表 - {str(e)}"
+
+                model_name = self._model_name
+                print(f"[OCR DEBUG] Using model: {model_name}")
+
+                content = [{'type': 'text', 'text': prompt}]
+                if image_path:
+                    content.append({'type': 'image_url', 'image_url': {'url': image_url}})
+
+                response = self.client.chat.completions.create(
+                    model=model_name,
+                    messages=[{'role': 'user', 'content': content}],
+                    temperature=0,
+                    timeout=45.0
+                )
+
+                result = response.choices[0].message.content
+                if result and len(result.strip()) > 0:
+                    print(f"[OCR SUCCESS] OCR result length: {len(result)}")
+                    if len(result) > 100:
+                        print(f"[OCR PREVIEW] {result[:100]}...")
+                    return result.strip()
+                else:
+                    print(f"[OCR WARNING] Empty result on attempt {attempt + 1}")
+                    if attempt < max_retries - 1:
+                        continue
+                    return "OCR錯誤: 識別結果為空"
+
             except Exception as e:
                 print(f"[OCR ERROR] API call failed on attempt {attempt + 1}: {e}")
                 print(f"[OCR ERROR] Exception type: {type(e).__name__}")
                 if attempt < max_retries - 1:
                     import time
-                    time.sleep(2)  # Wait before retry
+                    time.sleep(2)
                     continue
                 return f"OCR識別失敗: {str(e)}"
-        
+
         return "OCR錯誤: 所有重試均失敗"
     
 

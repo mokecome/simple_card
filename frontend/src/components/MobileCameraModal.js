@@ -10,7 +10,7 @@ import {
   CloseOutline,
   RedoOutline,
   CheckOutline,
-  LoopOutline
+  AppstoreOutline
 } from 'antd-mobile-icons';
 import './MobileCameraModal.css';
 
@@ -64,14 +64,84 @@ const MobileCameraModal = ({
     }
   }, [cameraManager, onClose]);
 
+  // 快取 video 尺寸（拍照前記錄，避免 callback 時 video 已被關閉）
+  const cachedVideoDims = useRef(null);
+
+  // 計算提示框對應的 video 原生像素裁切區域
+  // video 使用 object-fit:cover，需要從 CSS % 反算回原生座標
+  const computeGuideFrameRect = useCallback((useCached = false) => {
+    let videoW, videoH, containerW, containerH;
+
+    if (useCached && cachedVideoDims.current) {
+      ({ videoW, videoH, containerW, containerH } = cachedVideoDims.current);
+    } else {
+      const video = videoRef.current;
+      if (!video) return null;
+      videoW = video.videoWidth;
+      videoH = video.videoHeight;
+      containerW = video.clientWidth;
+      containerH = video.clientHeight;
+    }
+
+    if (!videoW || !videoH || !containerW || !containerH) return null;
+
+    // --- 取得當前提示框 CSS 百分比（與 MobileCameraModal.css 同步） ---
+    const screenWidth = window.innerWidth;
+    const isLandscape = window.matchMedia('(orientation: landscape)').matches;
+
+    let guideTop, guideBottom, guideLeft, guideRight;
+    if (isLandscape) {
+      guideTop = 0.15; guideBottom = 0.20; guideLeft = 0.15; guideRight = 0.15;
+    } else if (screenWidth <= 480) {
+      guideTop = 0.25; guideBottom = 0.30; guideLeft = 0.04; guideRight = 0.04;
+    } else {
+      guideTop = 0.28; guideBottom = 0.33; guideLeft = 0.05; guideRight = 0.05;
+    }
+
+    // --- object-fit:cover 映射 ---
+    const videoRatio = videoW / videoH;
+    const containerRatio = containerW / containerH;
+
+    let scale, offsetX, offsetY;
+    if (videoRatio > containerRatio) {
+      // video 比容器寬 → 左右被裁
+      scale = containerH / videoH;
+      offsetX = (videoW * scale - containerW) / 2;
+      offsetY = 0;
+    } else {
+      // video 比容器高 → 上下被裁
+      scale = containerW / videoW;
+      offsetX = 0;
+      offsetY = (videoH * scale - containerH) / 2;
+    }
+
+    // 提示框在容器中的像素位置
+    const frameLeft   = guideLeft * containerW;
+    const frameTop    = guideTop * containerH;
+    const frameRight  = (1 - guideRight) * containerW;
+    const frameBottom = (1 - guideBottom) * containerH;
+
+    // 反算回 video 原生像素座標
+    const natLeft   = Math.max(0, Math.round((frameLeft + offsetX) / scale));
+    const natTop    = Math.max(0, Math.round((frameTop + offsetY) / scale));
+    const natRight  = Math.min(videoW, Math.round((frameRight + offsetX) / scale));
+    const natBottom = Math.min(videoH, Math.round((frameBottom + offsetY) / scale));
+
+    return { x: natLeft, y: natTop, width: natRight - natLeft, height: natBottom - natTop };
+  }, []);
+
   // 拍照完成回調
   const handlePhotoTaken = useCallback((data) => {
+    // 使用快取的 video 尺寸計算提示框裁切區域（拍照後 video 可能已被關閉）
+    const guideFrameRect = computeGuideFrameRect(true);
+
     setIsCapturing(false);
+
     if (onPhotoTaken) {
-      onPhotoTaken(data);
+      onPhotoTaken({ ...data, guideFrameRect });
     }
     handleClose();
-  }, [onPhotoTaken, handleClose]);
+  }, [onPhotoTaken, handleClose, computeGuideFrameRect]);
 
   // 手動對焦功能
   const handleFocus = useCallback((event) => {
@@ -193,6 +263,17 @@ const MobileCameraModal = ({
       setIsCapturing(true);
       console.log('移動端開始拍照...');
 
+      // 拍照前先快取 video 尺寸（拍照後 video 可能已被關閉，尺寸歸零）
+      const video = videoRef.current;
+      if (video) {
+        cachedVideoDims.current = {
+          videoW: video.videoWidth,
+          videoH: video.videoHeight,
+          containerW: video.clientWidth,
+          containerH: video.clientHeight,
+        };
+      }
+
       // 拍照前短暫延遲，確保對焦穩定
       await new Promise(resolve => setTimeout(resolve, 200));
 
@@ -263,20 +344,24 @@ const MobileCameraModal = ({
           </div>
         )}
         
-        {/* 拍照指引線 - 更新版本 */}
+        {/* 暗色遮罩 + 名片框指引 */}
         {isReady && (
-          <div className="camera-guides">
-            <div className="guide-corner top-left"></div>
-            <div className="guide-corner top-right"></div>
-            <div className="guide-corner bottom-left"></div>
-            <div className="guide-corner bottom-right"></div>
-
-            {/* 拍攝範圍提示 */}
-            <div className="capture-hint">
-              <div className="hint-text">高清拍攝區域</div>
-              <div className="hint-subtext">將文件對準此區域以獲得最佳OCR效果</div>
+          <>
+            <div className="camera-overlay">
+              <div className="overlay-top"></div>
+              <div className="overlay-bottom"></div>
+              <div className="overlay-left"></div>
+              <div className="overlay-right"></div>
             </div>
-          </div>
+            <div className="card-window">
+              <div className="corner-accent top-left"></div>
+              <div className="corner-accent top-right"></div>
+              <div className="corner-accent bottom-left"></div>
+              <div className="corner-accent bottom-right"></div>
+              <div className="scan-line"></div>
+            </div>
+            <div className="card-hint">將名片放入框內拍攝</div>
+          </>
         )}
         
         {/* 控制按鈕 */}
@@ -299,7 +384,7 @@ const MobileCameraModal = ({
                 className="control-button grid-button"
                 disabled={!isReady}
               >
-                <LoopOutline />
+                <AppstoreOutline />
               </Button>
               
               {supportsCameraSwitch && (
