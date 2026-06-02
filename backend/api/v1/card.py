@@ -246,6 +246,7 @@ def list_cards(
     has_phone: Optional[bool] = Query(None, description="有無電話"),
     has_email: Optional[bool] = Query(None, description="有無Email"),
     has_address: Optional[bool] = Query(None, description="有無地址"),
+    confirmed: Optional[bool] = Query(None, description="是否已確認，true=已確認 / false=待確認 / 不傳=全部"),
     db: Session = Depends(get_db),
     current_user: str = Depends(get_current_user)
 ):
@@ -257,6 +258,7 @@ def list_cards(
                 name_zh=name_zh, name_en=name_en, company=company, position=position,
                 date_from=date_from, date_to=date_to,
                 has_phone=has_phone, has_email=has_email, has_address=has_address,
+                confirmed=confirmed,
             )
             industry_breakdown = None
             if is_all_industry(industry):
@@ -267,6 +269,7 @@ def list_cards(
                     name_zh=name_zh, name_en=name_en, company=company, position=position,
                     date_from=date_from, date_to=date_to,
                     has_phone=has_phone, has_email=has_email, has_address=has_address,
+                    confirmed=confirmed,
                 )
             return ResponseHandler.success(
                 data={
@@ -528,6 +531,105 @@ async def update_card_crop(
 
     except Exception as e:
         return ResponseHandler.error(message=f"裁切更新失敗: {str(e)}", status_code=500)
+
+
+# ===== 批次審核相關 API（路徑靜態段需在 /{card_id} 之前註冊以避免被吃掉）=====
+
+@router.get("/batch/{batch_id}")
+def get_batch_cards(
+    batch_id: str,
+    db: Session = Depends(get_db),
+    current_user: str = Depends(get_current_user)
+):
+    """取得特定批次的所有名片（按 created_at 升序）"""
+    try:
+        cards_query = db.query(CardORM).filter(
+            CardORM.batch_id == batch_id
+        ).order_by(CardORM.created_at).all()
+
+        if not cards_query:
+            return ResponseHandler.error(
+                message="找不到該批次或批次內無名片",
+                status_code=404
+            )
+
+        items = []
+        for c in cards_query:
+            card_dict = Card.model_validate(c).model_dump()
+            for key in card_dict:
+                if hasattr(card_dict[key], 'isoformat'):
+                    card_dict[key] = card_dict[key].isoformat()
+            items.append(card_dict)
+
+        confirmed_count = sum(1 for c in cards_query if c.confirmed_at is not None)
+
+        return ResponseHandler.success(
+            data={
+                "batch_id": batch_id,
+                "total": len(items),
+                "confirmed_count": confirmed_count,
+                "items": items,
+            }
+        )
+    except Exception as e:
+        logger.error(f"取得批次名片失敗: {e}")
+        return ResponseHandler.error(message="取得批次名片失敗", error=e, status_code=500)
+
+
+@router.post("/batch/{batch_id}/confirm-all")
+def confirm_batch_all(
+    batch_id: str,
+    db: Session = Depends(get_db),
+    current_user: str = Depends(get_current_user)
+):
+    """一鍵確認批次內所有未確認名片"""
+    try:
+        exists = db.query(CardORM.id).filter(CardORM.batch_id == batch_id).first()
+        if not exists:
+            return ResponseHandler.error(message="批次不存在", status_code=404)
+
+        now = datetime.now()
+        count = db.query(CardORM).filter(
+            CardORM.batch_id == batch_id,
+            CardORM.confirmed_at.is_(None)
+        ).update({CardORM.confirmed_at: now}, synchronize_session=False)
+        db.commit()
+        invalidate_card_stats_cache()
+
+        return ResponseHandler.success(
+            data={"batch_id": batch_id, "confirmed_count": count},
+            message=f"已確認 {count} 張名片"
+        )
+    except Exception as e:
+        logger.error(f"批次確認失敗: {e}")
+        return ResponseHandler.error(message="批次確認失敗", error=e, status_code=500)
+
+
+@router.put("/{card_id}/confirm")
+def confirm_card(
+    card_id: int,
+    db: Session = Depends(get_db),
+    current_user: str = Depends(get_current_user)
+):
+    """確認單張名片（將 confirmed_at 設為現在時間）"""
+    try:
+        card = db.query(CardORM).filter(CardORM.id == card_id).first()
+        if not card:
+            return ResponseHandler.error(message="名片不存在", status_code=404)
+
+        # Idempotent: if already confirmed, return success without changing timestamp
+        if card.confirmed_at is None:
+            card.confirmed_at = datetime.now()
+            db.commit()
+            invalidate_card_stats_cache()
+
+        return ResponseHandler.success(
+            data={"card_id": card_id, "confirmed_at": card.confirmed_at.isoformat()},
+            message="已確認"
+        )
+    except Exception as e:
+        logger.error(f"確認名片失敗: {e}")
+        return ResponseHandler.error(message="確認名片失敗", error=e, status_code=500)
 
 
 @router.get("/{card_id}")

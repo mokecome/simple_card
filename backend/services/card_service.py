@@ -129,6 +129,7 @@ def get_cards_paginated(
     has_phone: Optional[bool] = None,
     has_email: Optional[bool] = None,
     has_address: Optional[bool] = None,
+    confirmed: Optional[bool] = None,
 ) -> Tuple[List[dict], int]:
     """分頁獲取名片，支持搜索和過濾"""
     query = db.query(CardORM)
@@ -289,6 +290,12 @@ def get_cards_paginated(
     elif filter_status == "duplicate":
         query = query.filter(CardORM.duplicate_group_id.isnot(None), CardORM.reviewed_at.is_(None))
 
+    # 確認狀態篩選（與 filter_status 正交）
+    if confirmed is True:
+        query = query.filter(CardORM.confirmed_at.isnot(None))
+    elif confirmed is False:
+        query = query.filter(CardORM.confirmed_at.is_(None))
+
     # 獲取總數
     total = query.count()
     
@@ -321,6 +328,8 @@ def get_cards_paginated(
             card_dict['classified_at'] = card_dict['classified_at'].isoformat()
         if card_dict.get('reviewed_at'):
             card_dict['reviewed_at'] = card_dict['reviewed_at'].isoformat()
+        if card_dict.get('confirmed_at'):
+            card_dict['confirmed_at'] = card_dict['confirmed_at'].isoformat()
 
         card_dict['duplicate_count'] = dup_counts.get(card_orm.duplicate_group_id, 0)
 
@@ -342,6 +351,7 @@ def get_industry_breakdown(
     has_phone: Optional[bool] = None,
     has_email: Optional[bool] = None,
     has_address: Optional[bool] = None,
+    confirmed: Optional[bool] = None,
 ) -> Dict[str, int]:
     """
     在目前條件（search + status + 高級篩選）下，各 industry_category 的數量
@@ -463,6 +473,12 @@ def get_industry_breakdown(
     elif filter_status == "duplicate":
         query = query.filter(CardORM.duplicate_group_id.isnot(None), CardORM.reviewed_at.is_(None))
 
+    # 確認狀態篩選（與 filter_status 正交）
+    if confirmed is True:
+        query = query.filter(CardORM.confirmed_at.isnot(None))
+    elif confirmed is False:
+        query = query.filter(CardORM.confirmed_at.is_(None))
+
     query = query.group_by(CardORM.industry_category)
     rows = query.all()
 
@@ -487,6 +503,8 @@ def get_card(db: Session, card_id: int) -> dict:
         card_dict['classified_at'] = card_dict['classified_at'].isoformat()
     if card_dict.get('reviewed_at'):
         card_dict['reviewed_at'] = card_dict['reviewed_at'].isoformat()
+    if card_dict.get('confirmed_at'):
+        card_dict['confirmed_at'] = card_dict['confirmed_at'].isoformat()
 
     return card_dict
 
