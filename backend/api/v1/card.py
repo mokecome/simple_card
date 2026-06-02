@@ -595,6 +595,11 @@ def confirm_batch_all(
         ).update({CardORM.confirmed_at: now}, synchronize_session=False)
         db.commit()
         invalidate_card_stats_cache()
+        # 注意：此處未針對批次內每張名片清除單卡緩存（card_{id}）。
+        # 若有名片在過去 10 分鐘內被 GET /{card_id} 過，其緩存仍會持有舊的
+        # confirmed_at=None，最長 10 分鐘內可能讀到陳舊資料。
+        # 預先逐一查詢所有 batch 內名片 id 再清除緩存的成本過高，
+        # 此處接受該短暫不一致；stats 緩存已經失效。
 
         return ResponseHandler.success(
             data={"batch_id": batch_id, "confirmed_count": count},
@@ -622,6 +627,8 @@ def confirm_card(
             card.confirmed_at = datetime.now()
             db.commit()
             invalidate_card_stats_cache()
+            # 清除單張名片緩存（避免後續 GET 拿到 confirmed_at=None 的舊資料）
+            cache.delete(f"card_{card_id}")
 
         return ResponseHandler.success(
             data={"card_id": card_id, "confirmed_at": card.confirmed_at.isoformat()},

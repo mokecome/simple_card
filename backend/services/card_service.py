@@ -56,6 +56,8 @@ def get_cards(db: Session) -> List[dict]:
             card_dict['classified_at'] = card_dict['classified_at'].isoformat()
         if card_dict.get('reviewed_at'):
             card_dict['reviewed_at'] = card_dict['reviewed_at'].isoformat()
+        if card_dict.get('confirmed_at'):
+            card_dict['confirmed_at'] = card_dict['confirmed_at'].isoformat()
 
         result.append(card_dict)
     return result
