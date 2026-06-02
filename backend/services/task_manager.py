@@ -25,7 +25,7 @@ class TaskStatus(str, Enum):
 
 class Task:
     """任务对象"""
-    def __init__(self, task_id: str, total: int):
+    def __init__(self, task_id: str, total: int, batch_id: Optional[str] = None):
         self.task_id = task_id
         self.status = TaskStatus.PENDING
         self.total = total
@@ -36,6 +36,7 @@ class Task:
         self.started_at = None
         self.finished_at = None
         self.cancelled = False
+        self.batch_id = batch_id
         self.lock = threading.Lock()
 
     def to_dict(self) -> Dict:
@@ -51,7 +52,8 @@ class Task:
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "started_at": self.started_at.isoformat() if self.started_at else None,
             "finished_at": self.finished_at.isoformat() if self.finished_at else None,
-            "progress_percent": round((self.completed / self.total * 100) if self.total > 0 else 0, 1)
+            "progress_percent": round((self.completed / self.total * 100) if self.total > 0 else 0, 1),
+            "batch_id": self.batch_id,
         }
 
 
@@ -69,23 +71,24 @@ class TaskManager:
                     cls._instance.tasks_lock = threading.Lock()
         return cls._instance
 
-    def create_task(self, total: int) -> str:
+    def create_task(self, total: int, batch_id: Optional[str] = None) -> str:
         """
         创建新任务
 
         Args:
             total: 总任务数
+            batch_id: 关联的批次 ID（可选）
 
         Returns:
             task_id: 任务ID
         """
         task_id = str(uuid.uuid4())
-        task = Task(task_id, total)
+        task = Task(task_id, total, batch_id=batch_id)
 
         with self.tasks_lock:
             self.tasks[task_id] = task
 
-        logger.info(f"创建任务: {task_id}, 总数={total}")
+        logger.info(f"创建任务: {task_id}, 总数={total}, batch_id={batch_id}")
         return task_id
 
     def start_task(self, task_id: str):
