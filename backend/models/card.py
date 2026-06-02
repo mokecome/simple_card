@@ -67,6 +67,8 @@ class CardORM(Base):
     # 重複偵測欄位
     duplicate_group_id = Column(String(32), index=True)  # md5(name_zh|company_name_zh)
     reviewed_at = Column(DateTime)                        # 重複審查時間
+    batch_id = Column(String(64), index=True)             # 批次上傳 UUID，同批次共用
+    confirmed_at = Column(DateTime, index=True)           # 確認時間，NULL 表示待確認
 
     # 複合索引，優化常見查詢
     __table_args__ = (
@@ -135,5 +137,7 @@ class Card(BaseModel):
     # 重複偵測欄位
     duplicate_group_id: Optional[str] = None
     reviewed_at: Optional[datetime.datetime] = None
+    batch_id: Optional[str] = None
+    confirmed_at: Optional[datetime.datetime] = None
 
     model_config = {"from_attributes": True}

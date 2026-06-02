@@ -129,6 +129,8 @@ class CardResponse(CardBase):
     duplicate_group_id: Optional[str] = None
     duplicate_count: Optional[int] = None
     reviewed_at: Optional[datetime] = None
+    batch_id: Optional[str] = None
+    confirmed_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
