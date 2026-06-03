@@ -374,10 +374,14 @@ def get_cards_stats(db: Session = Depends(get_db), current_user: str = Depends(g
             if industry:
                 industry_stats[industry] = industry_stats.get(industry, 0) + 1
 
+        # 待確認名片數（confirmed_at 為空者）
+        pending_count = db.query(CardORM).filter(CardORM.confirmed_at.is_(None)).count()
+
         stats_data = {
             'total': total_count,
             'normal': normal_count,
             'problem': problem_count,
+            'pending': pending_count,
             'industry_stats': industry_stats
         }
 

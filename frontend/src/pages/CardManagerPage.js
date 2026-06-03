@@ -71,6 +71,7 @@ const CardManagerPage = () => {
     total: 0,
     normal: 0,
     problem: 0,
+    pending: 0,
     industry_stats: {}
   });
   
@@ -1331,7 +1332,7 @@ const CardManagerPage = () => {
               size="small"
               onClick={() => setFilterStatus('pending')}
             >
-              待確認
+              待確認 ({globalStats.pending || 0})
             </Button>
           </Space>
 

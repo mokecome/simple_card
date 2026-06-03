@@ -328,6 +328,7 @@ const BatchReviewPage = () => {
                 {card.front_image_url && (
                   <Image
                     src={card.front_image_url}
+                    alt={card.name_zh || `card ${card.id}`}
                     width={60}
                     height={60}
                     fit="cover"
