@@ -1682,7 +1682,7 @@ const CardManagerPage = () => {
                       {searchText && `關鍵詞: "${searchText}"`}
                       {industryFilter !== '全部' && (searchText ? ' | ' : '') + `產業: ${industryFilter}`}
                       {Object.values(advancedFilters).some(v => v) && " | 高級篩選"}
-                      {filterStatus !== 'all' && ` | 狀態: ${filterStatus === 'normal' ? '正常' : filterStatus === 'duplicate' ? '重複' : '有問題'}`}
+                      {filterStatus !== 'all' && ` | 狀態: ${filterStatus === 'normal' ? '正常' : filterStatus === 'duplicate' ? '重複' : filterStatus === 'pending' ? '待確認' : '有問題'}`}
                     </span>
                   </div>
                 </div>
