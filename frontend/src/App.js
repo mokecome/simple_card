@@ -7,6 +7,7 @@ import BatchUploadPage from './pages/BatchUploadPage';
 import CardManagerPage from './pages/CardManagerPage';
 import AddCardPage from './pages/AddCardPage';
 import CardDetailPage from './pages/CardDetailPage';
+import BatchReviewPage from './pages/BatchReviewPage';
 import DuplicateComparePage from './pages/DuplicateComparePage';
 import SpiderPage from './pages/SpiderPage';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -103,6 +104,7 @@ function App() {
         <Route path="/cards" element={<ProtectedRoute><CardManagerPage /></ProtectedRoute>} />
         <Route path="/add-card" element={<ProtectedRoute><AddCardPage /></ProtectedRoute>} />
         <Route path="/cards/duplicates/:groupId" element={<ProtectedRoute><DuplicateComparePage /></ProtectedRoute>} />
+        <Route path="/cards/batch/:batchId" element={<ProtectedRoute><BatchReviewPage /></ProtectedRoute>} />
         <Route path="/cards/:id" element={<ProtectedRoute><CardDetailPage /></ProtectedRoute>} />
         <Route path="/spider" element={<ProtectedRoute><SpiderPage /></ProtectedRoute>} />
       </Routes>
