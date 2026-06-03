@@ -110,10 +110,11 @@ const BatchUploadPage = () => {
       return;
     }
 
+    const offset = images.length;
     const newImages = newFiles.map((file, i) => ({
       file,
       preview: URL.createObjectURL(file),
-      id: `img_${Date.now()}_${i}`
+      id: `img_${Date.now()}_${offset + i}`
     }));
 
     setImages(prev => [...prev, ...newImages]);
@@ -253,7 +254,16 @@ const BatchUploadPage = () => {
                     #{i + 1}
                   </div>
                   <div
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`移除第 ${i + 1} 張圖片`}
                     onClick={() => handleRemoveImage(img.id)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        handleRemoveImage(img.id);
+                      }
+                    }}
                     style={{
                       position: 'absolute', top: 4, right: 4,
                       background: 'rgba(255,77,79,0.9)', color: '#fff',
