@@ -1534,19 +1534,19 @@ const CardManagerPage = () => {
                 <AddOutline /> OCR掃描
               </Button>
               <Button
+                size="middle"
+                style={{ flex: 1, maxWidth: '160px', fontSize: '13px', padding: '8px 0', background: 'linear-gradient(135deg, #06b6d4, #0891b2)', color: '#fff', border: 'none' }}
+                onClick={() => navigate('/batch-upload')}
+              >
+                <AddOutline /> 批次上傳
+              </Button>
+              <Button
                 color="success"
                 size="middle"
                 style={{ flex: 1, maxWidth: '160px', fontSize: '13px', padding: '8px 0' }}
                 onClick={() => document.getElementById('file-input').click()}
               >
                 <UploadOutline /> 名片王匯入
-              </Button>
-              <Button
-                size="middle"
-                style={{ flex: 1, maxWidth: '160px', fontSize: '13px', padding: '8px 0', background: 'linear-gradient(135deg, #06b6d4, #0891b2)', color: '#fff', border: 'none' }}
-                onClick={() => navigate('/batch-upload')}
-              >
-                <AddOutline /> 批次上傳
               </Button>
             </div>
             
