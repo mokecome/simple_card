@@ -27,6 +27,28 @@ const KEY_FIELDS = [
   { key: 'position_en', label: 'Position' },
 ];
 
+// 提交 PUT /cards/{id} 時要排除的鍵 —— 鏡像 CardDetailPage.js:182
+// （id/created_at/updated_at/crop_corners），並額外排除批次審核獨有的中介欄位
+// （batch_id、confirmed_at、圖片 URL/路徑、分類欄位等），這些不是 edit_card 端點接受的 Form 參數。
+const SKIP_KEYS = new Set([
+  // 鏡像 CardDetailPage 的 skipKeys
+  'id', 'created_at', 'updated_at',
+  'front_crop_corners', 'back_crop_corners',
+  // 本地 UI 狀態
+  '_dirty',
+  // 批次相關（後端不接受）
+  'batch_id', 'confirmed_at', 'reviewed_at',
+  // 圖片 URL / 路徑（由其他端點管理）
+  'front_image_url', 'back_image_url',
+  'front_image_path', 'back_image_path',
+  'front_cropped_image_path', 'back_cropped_image_path',
+  // OCR 原始文字（除非用戶顯式編輯，否則不應由本頁覆寫）
+  'front_ocr_text', 'back_ocr_text',
+  // 分類 / 去重欄位（由後台流程維護）
+  'industry_category', 'classification_confidence', 'classification_reason',
+  'classified_at', 'duplicate_group_id', 'duplicate_count',
+]);
+
 const BatchReviewPage = () => {
   const navigate = useNavigate();
   const { batchId } = useParams();
@@ -90,13 +112,25 @@ const BatchReviewPage = () => {
       setActionCardId(card.id);
       try {
         if (card._dirty) {
+          // 提交所有欄位 —— 後端 PUT /cards/{id} 對未送出的欄位會以 "" 覆寫，
+          // 只送 KEY_FIELDS 會把 position1_zh / department*_zh / company_phone* /
+          // company_address* / note* 等欄位悄悄清空。
           const formData = new FormData();
-          KEY_FIELDS.forEach(({ key }) => {
-            formData.append(key, card[key] != null ? card[key] : '');
+          Object.keys(card).forEach((key) => {
+            if (SKIP_KEYS.has(key)) return;
+            const v = card[key];
+            formData.append(key, v != null ? String(v) : '');
           });
           await axios.put(`${API_BASE_URL}/cards/${card.id}`, formData, {
             headers: { 'Content-Type': 'multipart/form-data' },
           });
+          // PUT 成功 → 立刻清 _dirty，避免後續 /confirm 失敗重試時又重送整包資料
+          setBatchData((prev) => ({
+            ...prev,
+            items: prev.items.map((c) =>
+              c.id === card.id ? { ...c, _dirty: false } : c
+            ),
+          }));
         }
         await axios.put(`${API_BASE_URL}/cards/${card.id}/confirm`, {});
         Toast.show({ content: '已確認', position: 'center' });
@@ -107,6 +141,8 @@ const BatchReviewPage = () => {
           error.response?.data?.message ||
           error.message;
         Toast.show({ content: `確認失敗: ${detail}`, position: 'center' });
+        // 失敗時 re-sync，讓畫面反映伺服器實際內容
+        await loadBatchCards();
       } finally {
         setActionCardId(null);
       }
@@ -116,10 +152,18 @@ const BatchReviewPage = () => {
 
   // 一次確認全部剩餘
   const handleConfirmAll = useCallback(() => {
-    const remaining = batchData.items.filter((c) => !c.confirmed_at).length;
+    const unconfirmed = batchData.items.filter((c) => !c.confirmed_at);
+    const remaining = unconfirmed.length;
     if (remaining === 0) return;
+    // 偵測未保存的本地編輯 —— confirm-all 直接走後端，會用「資料庫目前內容」確認，
+    // 任何未先儲存的編輯都會被丟棄；提醒使用者。
+    const dirtyCount = unconfirmed.filter((c) => c._dirty).length;
+    const content =
+      dirtyCount > 0
+        ? `你有 ${dirtyCount} 張未保存的編輯，繼續將直接以「目前資料庫內容」確認，未保存的修改將被丟棄。要繼續嗎？`
+        : `確認剩餘 ${remaining} 張名片？確認後將進入正式名片庫。`;
     Dialog.confirm({
-      content: `確認剩餘 ${remaining} 張名片？確認後將進入正式名片庫。`,
+      content,
       confirmText: '確認',
       cancelText: '取消',
       onConfirm: async () => {
