@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, useNavigate } from 'react-route
 import 'antd-mobile/es/global';
 import './App.css';
 import ScanUploadPage from './pages/ScanUploadPage';
+import BatchUploadPage from './pages/BatchUploadPage';
 import CardManagerPage from './pages/CardManagerPage';
 import AddCardPage from './pages/AddCardPage';
 import CardDetailPage from './pages/CardDetailPage';
@@ -53,6 +54,15 @@ const Home = () => {
           <span className="feature-arrow">›</span>
         </div>
 
+        <div className="feature-card feature-card--batch" onClick={() => navigate('/batch-upload')}>
+          <div className="feature-icon">📦</div>
+          <div className="feature-text">
+            <div className="feature-name">批次上傳辨識</div>
+            <div className="feature-desc">一次上傳最多 50 張名片，OCR 背景處理</div>
+          </div>
+          <span className="feature-arrow">›</span>
+        </div>
+
         <div className="feature-card feature-card--cards" onClick={() => handleProtectedClick('/cards')}>
           <div className="feature-icon">📋</div>
           <div className="feature-text">
@@ -89,6 +99,7 @@ function App() {
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/scan" element={<ScanUploadPage />} />
+        <Route path="/batch-upload" element={<BatchUploadPage />} />
         <Route path="/cards" element={<ProtectedRoute><CardManagerPage /></ProtectedRoute>} />
         <Route path="/add-card" element={<ProtectedRoute><AddCardPage /></ProtectedRoute>} />
         <Route path="/cards/duplicates/:groupId" element={<ProtectedRoute><DuplicateComparePage /></ProtectedRoute>} />

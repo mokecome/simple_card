@@ -125,6 +125,17 @@
 .feature-card--scan .feature-icon { background: linear-gradient(135deg, #3b82f6, #2563eb); box-shadow: 0 4px 16px rgba(59, 130, 246, 0.35); }
 .feature-card--scan::after { background: radial-gradient(circle at 100% 50%, #3b82f6, transparent); }
 
+/* Batch upload card - cyan/teal */
+.feature-card--batch {
+  background: linear-gradient(135deg, #163e44 0%, #142d33 100%);
+  border: 1px solid rgba(6, 182, 212, 0.2);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  animation: homeSlideUp 0.5s ease-out 0.15s both;
+}
+.feature-card--batch:active { box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3); }
+.feature-card--batch .feature-icon { background: linear-gradient(135deg, #06b6d4, #0891b2); box-shadow: 0 4px 16px rgba(6, 182, 212, 0.35); }
+.feature-card--batch::after { background: radial-gradient(circle at 100% 50%, #06b6d4, transparent); }
+
 /* Cards card - emerald */
 .feature-card--cards {
   background: linear-gradient(135deg, #1a3a2f 0%, #172b24 100%);
