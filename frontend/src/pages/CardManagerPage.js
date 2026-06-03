@@ -1034,7 +1034,7 @@ const CardManagerPage = () => {
                 職位2: <HighlightText text={card.position1_zh} keyword={searchText} />
               </Tag>
             )}
-            {!card.confirmed_at && (
+            {!card.confirmed_at && card.batch_id && (
               <Tag color="warning" style={{ marginLeft: '4px' }}>未確認</Tag>
             )}
           </div>
@@ -1194,21 +1194,7 @@ const CardManagerPage = () => {
 
   return (
     <div className="card-manager-page">
-      <NavBar
-        onBack={() => navigate('/')}
-        right={
-          <Button
-            size="mini"
-            color="primary"
-            fill="none"
-            onClick={() => navigate('/batch-upload')}
-          >
-            <AddOutline /> 批次上傳
-          </Button>
-        }
-      >
-        名片管理
-      </NavBar>
+      <NavBar onBack={() => navigate('/')}>名片管理</NavBar>
       
       <div className="content" style={{ padding: '16px' }}>
         {/* 搜索欄 */}
@@ -1554,6 +1540,13 @@ const CardManagerPage = () => {
                 onClick={() => document.getElementById('file-input').click()}
               >
                 <UploadOutline /> 名片王匯入
+              </Button>
+              <Button
+                size="middle"
+                style={{ flex: 1, maxWidth: '160px', fontSize: '13px', padding: '8px 0', background: 'linear-gradient(135deg, #06b6d4, #0891b2)', color: '#fff', border: 'none' }}
+                onClick={() => navigate('/batch-upload')}
+              >
+                <AddOutline /> 批次上傳
               </Button>
             </div>
             

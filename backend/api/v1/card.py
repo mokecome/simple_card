@@ -374,8 +374,11 @@ def get_cards_stats(db: Session = Depends(get_db), current_user: str = Depends(g
             if industry:
                 industry_stats[industry] = industry_stats.get(industry, 0) + 1
 
-        # 待確認名片數（confirmed_at 為空者）
-        pending_count = db.query(CardORM).filter(CardORM.confirmed_at.is_(None)).count()
+        # 待確認名片數：僅統計批次上傳的名片（舊有單張掃描/手動新增的名片 batch_id 為 NULL，不計入）
+        pending_count = db.query(CardORM).filter(
+            CardORM.confirmed_at.is_(None),
+            CardORM.batch_id.isnot(None)
+        ).count()
 
         stats_data = {
             'total': total_count,

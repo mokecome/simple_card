@@ -292,11 +292,12 @@ def get_cards_paginated(
     elif filter_status == "duplicate":
         query = query.filter(CardORM.duplicate_group_id.isnot(None), CardORM.reviewed_at.is_(None))
 
-    # 確認狀態篩選（與 filter_status 正交）
+    # 確認狀態篩選（與 filter_status 正交）— 僅針對「批次上傳」的名片
+    # 舊有單張掃描/手動新增的名片沒有 batch_id，不在「待確認/已確認」範疇內
     if confirmed is True:
-        query = query.filter(CardORM.confirmed_at.isnot(None))
+        query = query.filter(CardORM.confirmed_at.isnot(None), CardORM.batch_id.isnot(None))
     elif confirmed is False:
-        query = query.filter(CardORM.confirmed_at.is_(None))
+        query = query.filter(CardORM.confirmed_at.is_(None), CardORM.batch_id.isnot(None))
 
     # 獲取總數
     total = query.count()
@@ -475,11 +476,12 @@ def get_industry_breakdown(
     elif filter_status == "duplicate":
         query = query.filter(CardORM.duplicate_group_id.isnot(None), CardORM.reviewed_at.is_(None))
 
-    # 確認狀態篩選（與 filter_status 正交）
+    # 確認狀態篩選（與 filter_status 正交）— 僅針對「批次上傳」的名片
+    # 舊有單張掃描/手動新增的名片沒有 batch_id，不在「待確認/已確認」範疇內
     if confirmed is True:
-        query = query.filter(CardORM.confirmed_at.isnot(None))
+        query = query.filter(CardORM.confirmed_at.isnot(None), CardORM.batch_id.isnot(None))
     elif confirmed is False:
-        query = query.filter(CardORM.confirmed_at.is_(None))
+        query = query.filter(CardORM.confirmed_at.is_(None), CardORM.batch_id.isnot(None))
 
     query = query.group_by(CardORM.industry_category)
     rows = query.all()
