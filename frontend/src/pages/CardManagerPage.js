@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Card,
   Button,
@@ -36,7 +36,8 @@ import { Dialog } from 'antd-mobile';
 
 
 const CardManagerPage = () => {
-  const navigate = useNavigate(); 
+  const navigate = useNavigate();
+  const location = useLocation();
   const [cards, setCards] = useState([]);
   const [loading, setLoading] = useState(false);
   const [searchText, setSearchText] = useState('');
@@ -384,7 +385,8 @@ const CardManagerPage = () => {
           limit: pageSize,
           search: searchText || undefined,
           industry: industryFilter && industryFilter !== '全部' ? industryFilter : undefined,
-          status: filterStatus !== 'all' ? filterStatus : undefined,
+          status: (filterStatus !== 'all' && filterStatus !== 'pending') ? filterStatus : undefined,
+          confirmed: filterStatus === 'pending' ? false : undefined,
           // 高級篩選
           name_zh: advancedFilters.name_zh || undefined,
           name_en: advancedFilters.name_en || undefined,
@@ -440,6 +442,14 @@ const CardManagerPage = () => {
     loadCards();
     loadGlobalStats(); // 載入全局統計數據
   }, []);
+
+  // URL query string 支援：?confirmed=false 自動切到「待確認」篩選
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get('confirmed') === 'false') {
+      setFilterStatus('pending');
+    }
+  }, [location.search]);
 
 
   // 所有篩選條件改變時，重新從後端載入（防抖 300ms）
@@ -508,7 +518,8 @@ const CardManagerPage = () => {
       const params = new URLSearchParams({ format });
       if (searchText) params.append('search', searchText);
       if (industryFilter && industryFilter !== '全部') params.append('industry', industryFilter);
-      if (filterStatus && filterStatus !== 'all') params.append('status', filterStatus);
+      if (filterStatus && filterStatus !== 'all' && filterStatus !== 'pending') params.append('status', filterStatus);
+      if (filterStatus === 'pending') params.append('confirmed', 'false');
       // 高級篩選
       if (advancedFilters.name_zh) params.append('name_zh', advancedFilters.name_zh);
       if (advancedFilters.name_en) params.append('name_en', advancedFilters.name_en);
@@ -834,7 +845,13 @@ const CardManagerPage = () => {
       key={card.id}
       style={cardStyle}
       bodyStyle={{ padding: '16px' }}
-      onClick={() => navigate(`/cards/${card.id}`)}
+      onClick={() => {
+        if (!card.confirmed_at && card.batch_id) {
+          navigate(`/cards/batch/${card.batch_id}`);
+        } else {
+          navigate(`/cards/${card.id}`);
+        }
+      }}
     >
       <div className="card-content">
         {/* 名片圖片預覽 */}
@@ -1016,6 +1033,9 @@ const CardManagerPage = () => {
                 職位2: <HighlightText text={card.position1_zh} keyword={searchText} />
               </Tag>
             )}
+            {!card.confirmed_at && (
+              <Tag color="warning" style={{ marginLeft: '4px' }}>未確認</Tag>
+            )}
           </div>
           {/* 產業分類標籤 */}
           {card.industry_category && (
@@ -1173,7 +1193,21 @@ const CardManagerPage = () => {
 
   return (
     <div className="card-manager-page">
-      <NavBar onBack={() => navigate('/')}>名片管理</NavBar>
+      <NavBar
+        onBack={() => navigate('/')}
+        right={
+          <Button
+            size="mini"
+            color="primary"
+            fill="none"
+            onClick={() => navigate('/batch-upload')}
+          >
+            <AddOutline /> 批次上傳
+          </Button>
+        }
+      >
+        名片管理
+      </NavBar>
       
       <div className="content" style={{ padding: '16px' }}>
         {/* 搜索欄 */}
@@ -1290,6 +1324,14 @@ const CardManagerPage = () => {
               onClick={() => setFilterStatus('duplicate')}
             >
               重複
+            </Button>
+            <Button
+              color={filterStatus === 'pending' ? 'warning' : 'default'}
+              fill={filterStatus === 'pending' ? 'solid' : 'outline'}
+              size="small"
+              onClick={() => setFilterStatus('pending')}
+            >
+              待確認
             </Button>
           </Space>
 
