@@ -49,6 +49,19 @@ const SKIP_KEYS = new Set([
   'classified_at', 'duplicate_group_id', 'duplicate_count',
 ]);
 
+// Mirror of CardManagerPage.getImageUrl — backend stores filesystem paths;
+// translate to the static mount the React app can fetch.
+const getImageUrl = (imagePath) => {
+  if (!imagePath) return null;
+  if (imagePath.startsWith('card_data/')) {
+    return `/static/${imagePath}`;
+  }
+  if (imagePath.startsWith('output/card_images/')) {
+    return `/static/uploads/${imagePath.replace('output/card_images/', '')}`;
+  }
+  return imagePath;
+};
+
 const BatchReviewPage = () => {
   const navigate = useNavigate();
   const { batchId } = useParams();
@@ -325,9 +338,9 @@ const BatchReviewPage = () => {
                     )}
                   </div>
                 </div>
-                {card.front_image_url && (
+                {getImageUrl(card.front_cropped_image_path || card.front_image_path) && (
                   <Image
-                    src={card.front_image_url}
+                    src={getImageUrl(card.front_cropped_image_path || card.front_image_path)}
                     alt={card.name_zh || `card ${card.id}`}
                     width={60}
                     height={60}
