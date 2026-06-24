@@ -46,7 +46,11 @@ class CameraManager {
         cameraStart: (data) => this.emit('cameraStart', data),
         cameraStop: () => this.emit('cameraStop'),
         cameraError: (error) => this.emit('cameraError', error),
-        photoTaken: (data) => this.emit('photoTaken', data),
+        // 注意：不要在此轉發 strategy 的 photoTaken。
+        // strategy.takePhoto() 內部已 emit('photoTaken')，而 cameraManager.takePhoto()
+        // 在取得結果後也會 emit('photoTaken', enhancedResult)。若兩者都轉發，
+        // 單次拍照會觸發兩次回呼，導致 OCR/解析重複執行（手機相機會「又解析一次」）。
+        // 統一由 cameraManager.takePhoto() 作為唯一發送點（攜帶較完整的 enhancedResult）。
         photoError: (error) => this.emit('photoError', error),
         cameraSwitch: (data) => this.emit('cameraSwitch', data),
         cameraSwitchError: (error) => this.emit('cameraSwitchError', error)
