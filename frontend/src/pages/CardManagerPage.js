@@ -41,7 +41,6 @@ const CardManagerPage = () => {
   const [cards, setCards] = useState([]);
   const [loading, setLoading] = useState(false);
   const [searchText, setSearchText] = useState('');
-  const [filteredCards, setFilteredCards] = useState([]);
 
   // ⬇ 新增：目前這組「search + 產業 + 狀態」條件下，後端告訴你的總筆數
   const [filteredTotal, setFilteredTotal] = useState(0);
@@ -150,11 +149,22 @@ const CardManagerPage = () => {
     return imagePath;
   };
 
+  // 列表縮圖：走後端 /thumb（即時生成+快取），避免列表下載全尺寸原圖。非標準路徑退回原圖。
+  const getThumbUrl = (imagePath, w = 240) => {
+    if (!imagePath) return null;
+    if (imagePath.startsWith('card_data/') || imagePath.startsWith('output/card_images/')) {
+      return `/api/v1/cards/thumb?path=${encodeURIComponent(imagePath)}&w=${w}`;
+    }
+    return getImageUrl(imagePath);
+  };
+
   // 關鍵詞高亮組件
   const HighlightText = ({ text, keyword }) => {
     if (!text || !keyword) return text || '';
 
-    const parts = text.toString().split(new RegExp(`(${keyword})`, 'gi'));
+    // 跳脫正則特殊字元，否則搜尋含 ( ) * + 等字元會丟例外、整列炸掉
+    const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const parts = text.toString().split(new RegExp(`(${escaped})`, 'gi'));
     return parts.map((part, index) =>
       part.toLowerCase() === keyword.toLowerCase() ? (
         <span key={index} style={{ backgroundColor: '#fffb8f', color: '#cf1322', fontWeight: 'bold' }}>
@@ -375,7 +385,6 @@ const CardManagerPage = () => {
       setLoading(true);
       setCurrentPage(0);
       setCards([]);
-      setFilteredCards([]);
     }
 
     try {
@@ -404,19 +413,17 @@ const CardManagerPage = () => {
       if (response.data && response.data.success && response.data.data) {
         const { items, total, has_more, industry_stats, industry_breakdown } = response.data.data;
 
-        // ⬇ 新增：更新本次條件下的產業分布
-        setFilteredIndustryStats(industry_stats || industry_breakdown || {});
+        // 總數與產業分布只在第一頁回傳（後續頁 total=-1），故僅第一頁更新
+        if (!isLoadMore) {
+          setFilteredIndustryStats(industry_stats || industry_breakdown || {});
+          setFilteredTotal(total || 0);
+        }
 
-        // ⬇ 新增：不管是不是載更多，都更新「符合條件的總筆數」
-        setFilteredTotal(total || 0);
-        
         if (isLoadMore) {
           setCards(prev => [...prev, ...items]);
-          setFilteredCards(prev => [...prev, ...items]);
           setCurrentPage(currentPageToLoad);
         } else {
           setCards(items);
-          setFilteredCards(items);
           setCurrentPage(0);
         }
         
@@ -440,8 +447,8 @@ const CardManagerPage = () => {
   };
 
   useEffect(() => {
-    loadCards();
-    loadGlobalStats(); // 載入全局統計數據
+    // loadCards 由下方 debounce effect 在首次 render 時負責，這裡只載全局統計，避免開頁打兩次列表 API
+    loadGlobalStats();
   }, []);
 
   // URL query string 支援：?confirmed=false 自動切到「待確認」篩選
@@ -835,9 +842,13 @@ const CardManagerPage = () => {
       backgroundColor: cardStatus.status === 'problem' ? '#fff2f0' : '#ffffff'
     };
 
-    // 獲取圖片URL
-    const frontImageUrl = getImageUrl(card.front_cropped_image_path || card.front_image_path);
-    const backImageUrl = getImageUrl(card.back_cropped_image_path || card.back_image_path);
+    // 列表顯示用縮圖，點擊放大檢視用原圖
+    const frontPath = card.front_cropped_image_path || card.front_image_path;
+    const backPath = card.back_cropped_image_path || card.back_image_path;
+    const frontImageUrl = getImageUrl(frontPath);
+    const backImageUrl = getImageUrl(backPath);
+    const frontThumbUrl = getThumbUrl(frontPath);
+    const backThumbUrl = getThumbUrl(backPath);
     const hasImage = frontImageUrl || backImageUrl;
 
 
@@ -870,7 +881,7 @@ const CardManagerPage = () => {
               <div style={{ flex: 1, maxWidth: '50%' }}>
                 <div style={{ fontSize: '11px', color: '#999', marginBottom: '4px' }}>正面</div>
                 <Image
-                  src={frontImageUrl}
+                  src={frontThumbUrl}
                   fit="contain"
                   style={{
                     width: '100%',
@@ -905,7 +916,7 @@ const CardManagerPage = () => {
               <div style={{ flex: 1, maxWidth: '50%' }}>
                 <div style={{ fontSize: '11px', color: '#999', marginBottom: '4px' }}>反面</div>
                 <Image
-                  src={backImageUrl}
+                  src={backThumbUrl}
                   fit="contain"
                   style={{
                     width: '100%',
@@ -1279,8 +1290,8 @@ const CardManagerPage = () => {
             </Button>
           </div>
           
-          <Space>
-            <Button 
+          <Space wrap>
+            <Button
               color={filterStatus === 'all' ? 'primary' : 'default'}
               fill={filterStatus === 'all' ? 'solid' : 'outline'}
               size="small"
@@ -1447,9 +1458,9 @@ const CardManagerPage = () => {
 
               <div style={{ marginBottom: '12px' }}>
                 <div style={{ marginBottom: '8px', fontSize: '13px' }}>聯絡方式篩選</div>
-                <Space>
-                  <Button 
-                    size="small" 
+                <Space wrap>
+                  <Button
+                    size="small"
                     color={advancedFilters.hasPhone === true ? 'primary' : 'default'}
                     fill={advancedFilters.hasPhone === true ? 'solid' : 'outline'}
                     onClick={() => setAdvancedFilters(prev => ({ 
@@ -1622,7 +1633,7 @@ const CardManagerPage = () => {
             <div style={{ textAlign: 'center', padding: '40px' }}>
               <div>載入中...</div>
             </div>
-          ) : filteredCards.length === 0 ? (
+          ) : cards.length === 0 ? (
             <Empty
               style={{ padding: '40px' }}
               description={
@@ -1682,7 +1693,7 @@ const CardManagerPage = () => {
                 </div>
               )}
               <div>
-                {filteredCards.map(renderCardItem)}
+                {cards.map(renderCardItem)}
                 <InfiniteScroll 
                   loadMore={loadMore} 
                   hasMore={hasMore}

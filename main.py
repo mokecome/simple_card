@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 import os
@@ -48,6 +49,9 @@ app = FastAPI(
     debug=DEBUG,
     lifespan=lifespan
 )
+
+# gzip 壓縮回應（名片列表 JSON 可壓 5-10x，對手機/慢網最有感）；只壓 >1KB 的回應
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 # 添加統一錯誤處理中間件
 app.add_middleware(ErrorHandlingMiddleware)

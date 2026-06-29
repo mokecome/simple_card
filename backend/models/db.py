@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.pool import StaticPool, QueuePool
@@ -25,6 +25,15 @@ else:
         pool_recycle=3600,     # 每小時回收連接
         echo_pool=settings.DEBUG  # 調試模式下顯示池活動
     )
+
+# SQLite: 開 WAL 讓讀寫並行、降低 fsync 成本（查名片以讀為主，收益明顯）
+if settings.DATABASE_URL.startswith('sqlite'):
+    @event.listens_for(engine, "connect")
+    def _set_sqlite_pragma(dbapi_conn, _record):
+        cur = dbapi_conn.cursor()
+        cur.execute("PRAGMA journal_mode=WAL")
+        cur.execute("PRAGMA synchronous=NORMAL")
+        cur.close()
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 

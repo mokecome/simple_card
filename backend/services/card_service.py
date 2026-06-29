@@ -1,6 +1,6 @@
 from backend.models.card import CardORM, Card
-from sqlalchemy.orm import Session
-from typing import Dict, Iterator, List, Optional, Tuple
+from sqlalchemy.orm import Session, defer
+from typing import Dict, List, Optional, Tuple
 from sqlalchemy import and_, or_, func
 import datetime
 import hashlib
@@ -62,66 +62,75 @@ def get_cards(db: Session) -> List[dict]:
         result.append(card_dict)
     return result
 
-def iterate_cards_for_stats(db: Session, chunk_size: int = 500) -> Iterator[Dict[str, Optional[str]]]:
-    """以最小欄位集批次迭代名片，用於統計計算"""
-    query = (
-        db.query(
-            CardORM.name_zh,
-            CardORM.name_en,
-            CardORM.company_name_zh,
-            CardORM.company_name_en,
-            CardORM.position_zh,
-            CardORM.position_en,
-            CardORM.position1_zh,
-            CardORM.position1_en,
-            CardORM.department1_zh,
-            CardORM.department1_en,
-            CardORM.department2_zh,
-            CardORM.department2_en,
-            CardORM.department3_zh,
-            CardORM.department3_en,
-            CardORM.mobile_phone,
-            CardORM.company_phone1,
-            CardORM.company_phone2,
-            CardORM.email,
-            CardORM.line_id,
-            CardORM.industry_category
-        )
-        .order_by(CardORM.created_at.desc())
+def _is_empty(col):
+    # 用 TRIM 比對，與前端 checkCardStatus 的 .trim() 一致（純空白也算空），避免統計/篩選與前端徽章不一致
+    return or_(col.is_(None), func.trim(col) == "")
+
+
+def _is_not_empty(col):
+    return and_(col.isnot(None), func.trim(col) != "")
+
+
+def _problem_condition():
+    """名片『有問題』判斷：缺姓名 / 公司 / 職位或部門 / 聯絡方式 任一即算。
+    列表 filter_status='problem' 與全域統計共用，確保兩邊數字一致。"""
+    name_missing = and_(_is_empty(CardORM.name_zh), _is_empty(CardORM.name_en))
+    company_missing = and_(_is_empty(CardORM.company_name_zh), _is_empty(CardORM.company_name_en))
+    position_missing = and_(
+        _is_empty(CardORM.position_zh), _is_empty(CardORM.position_en),
+        _is_empty(CardORM.position1_zh), _is_empty(CardORM.position1_en),
+    )
+    department_missing = and_(
+        _is_empty(CardORM.department1_zh), _is_empty(CardORM.department1_en),
+        _is_empty(CardORM.department2_zh), _is_empty(CardORM.department2_en),
+        _is_empty(CardORM.department3_zh), _is_empty(CardORM.department3_en),
+    )
+    contact_missing = and_(
+        _is_empty(CardORM.mobile_phone),
+        _is_empty(CardORM.company_phone1),
+        _is_empty(CardORM.company_phone2),
+        _is_empty(CardORM.email),
+        _is_empty(CardORM.line_id),
+    )
+    return or_(
+        name_missing, company_missing,
+        and_(position_missing, department_missing),
+        contact_missing,
     )
 
-    for row in query.yield_per(chunk_size):
-        yield {
-            "name_zh": row.name_zh,
-            "name_en": row.name_en,
-            "company_name_zh": row.company_name_zh,
-            "company_name_en": row.company_name_en,
-            "position_zh": row.position_zh,
-            "position_en": row.position_en,
-            "position1_zh": row.position1_zh,
-            "position1_en": row.position1_en,
-            "department1_zh": row.department1_zh,
-            "department1_en": row.department1_en,
-            "department2_zh": row.department2_zh,
-            "department2_en": row.department2_en,
-            "department3_zh": row.department3_zh,
-            "department3_en": row.department3_en,
-            "mobile_phone": row.mobile_phone,
-            "company_phone1": row.company_phone1,
-            "company_phone2": row.company_phone2,
-            "email": row.email,
-            "line_id": row.line_id,
-            "industry_category": row.industry_category
-        }
 
-def get_cards_paginated(
-    db: Session,
-    skip: int = 0,
-    limit: int = 100,
+def get_card_stats(db: Session) -> Dict[str, object]:
+    """全域統計（total / normal / problem / pending / industry_stats），全部用 SQL 聚合，
+    取代逐列 Python 迴圈。problem 與列表的 problem 篩選共用同一條件。"""
+    total = db.query(func.count(CardORM.id)).scalar() or 0
+    problem = db.query(func.count(CardORM.id)).filter(_problem_condition()).scalar() or 0
+    pending = db.query(func.count(CardORM.id)).filter(
+        CardORM.confirmed_at.is_(None),
+        CardORM.batch_id.isnot(None),
+    ).scalar() or 0
+
+    industry_stats: Dict[str, int] = {}
+    for cat, cnt in (
+        db.query(CardORM.industry_category, func.count(CardORM.id))
+        .filter(CardORM.industry_category.isnot(None), CardORM.industry_category != "")
+        .group_by(CardORM.industry_category)
+        .all()
+    ):
+        industry_stats[cat] = int(cnt)
+
+    return {
+        'total': total,
+        'normal': total - problem,
+        'problem': problem,
+        'pending': pending,
+        'industry_stats': industry_stats,
+    }
+
+
+def _apply_card_filters(
+    query,
     search: Optional[str] = None,
-    industry: Optional[str] = None,
     filter_status: Optional[str] = None,
-    # 高級篩選參數
     name_zh: Optional[str] = None,
     name_en: Optional[str] = None,
     company: Optional[str] = None,
@@ -132,37 +141,24 @@ def get_cards_paginated(
     has_email: Optional[bool] = None,
     has_address: Optional[bool] = None,
     confirmed: Optional[bool] = None,
-) -> Tuple[List[dict], int]:
-    """分頁獲取名片，支持搜索和過濾"""
-    query = db.query(CardORM)
-
-    # 产业分类过滤
-    if industry and industry != '全部':
-        query = query.filter(CardORM.industry_category == industry)
-
-    # 搜索過濾 - 支援姓名、公司、職稱的中英文搜索
+):
+    """套用 search / 高級篩選 / 狀態 / 確認狀態（不含 industry 過濾與排序分頁）。
+    get_cards_paginated 與產業分布共用同一份篩選邏輯，避免兩處走樣。"""
     if search:
-        search_filter = or_(
-            # 姓名搜索 (中英文)
+        query = query.filter(or_(
             CardORM.name_zh.contains(search),
             CardORM.name_en.contains(search),
-            # 公司搜索 (中英文)
             CardORM.company_name_zh.contains(search),
             CardORM.company_name_en.contains(search),
-            # 職稱搜索 (中英文，支援兩個職稱欄位)
             CardORM.position_zh.contains(search),
             CardORM.position_en.contains(search),
             CardORM.position1_zh.contains(search),
             CardORM.position1_en.contains(search),
-            # 聯絡資訊搜索
             CardORM.mobile_phone.contains(search),
             CardORM.email.contains(search),
-            # 🔍 產業標籤搜尋（primary_label + labels 都在這欄）
             CardORM.classification_reason.contains(search),
-        )
-        query = query.filter(search_filter)
+        ))
 
-    # === 高級篩選 ===
     if name_zh:
         query = query.filter(CardORM.name_zh.contains(name_zh))
     if name_en:
@@ -180,7 +176,6 @@ def get_cards_paginated(
             CardORM.position1_en.contains(position),
         ))
 
-    # 日期區間篩選
     if date_from:
         try:
             dt_from = datetime.datetime.strptime(date_from, "%Y-%m-%d")
@@ -194,11 +189,7 @@ def get_cards_paginated(
         except ValueError:
             pass
 
-    # 聯絡方式篩選
-    def is_empty(col):
-        return or_(col.is_(None), col == "")
-    def is_not_empty(col):
-        return and_(col.isnot(None), col != "")
+    is_empty, is_not_empty = _is_empty, _is_not_empty
 
     if has_phone is True:
         query = query.filter(or_(
@@ -229,81 +220,92 @@ def get_cards_paginated(
             is_empty(CardORM.company_address2_zh),
         ))
 
-    # 狀態過濾（normal / problem）
     if filter_status in ("normal", "problem"):
-        # 定義「欄位是空的」的判斷（NULL 或 空字串）
-        def is_empty(col):
-            return or_(col.is_(None), col == "")
-
-        # 姓名缺失（中 + 英 都空）
-        name_missing = and_(
-            is_empty(CardORM.name_zh),
-            is_empty(CardORM.name_en),
-        )
-
-        # 公司缺失（中 + 英 都空）
-        company_missing = and_(
-            is_empty(CardORM.company_name_zh),
-            is_empty(CardORM.company_name_en),
-        )
-
-        # 職位全空
-        position_missing = and_(
-            is_empty(CardORM.position_zh),
-            is_empty(CardORM.position_en),
-            is_empty(CardORM.position1_zh),
-            is_empty(CardORM.position1_en),
-        )
-
-        # 部門全空
-        department_missing = and_(
-            is_empty(CardORM.department1_zh),
-            is_empty(CardORM.department1_en),
-            is_empty(CardORM.department2_zh),
-            is_empty(CardORM.department2_en),
-            is_empty(CardORM.department3_zh),
-            is_empty(CardORM.department3_en),
-        )
-
-        # 職位 & 部門都沒有 → 視為缺「職位或部門」
-        position_or_dept_missing = and_(position_missing, department_missing)
-
-        # 聯絡方式缺失（手機、電話1/2、Email、Line 全空）
-        contact_missing = and_(
-            is_empty(CardORM.mobile_phone),
-            is_empty(CardORM.company_phone1),
-            is_empty(CardORM.company_phone2),
-            is_empty(CardORM.email),
-            is_empty(CardORM.line_id),
-        )
-
-        # 「有問題」的判斷：有任一類缺失即可
-        problem_condition = or_(
-            name_missing,
-            company_missing,
-            position_or_dept_missing,
-            contact_missing,
-        )
-
+        problem_condition = _problem_condition()
         if filter_status == "problem":
             query = query.filter(problem_condition)
-        elif filter_status == "normal":
+        else:
             query = query.filter(~problem_condition)
     elif filter_status == "duplicate":
         query = query.filter(CardORM.duplicate_group_id.isnot(None), CardORM.reviewed_at.is_(None))
 
     # 確認狀態篩選（與 filter_status 正交）— 僅針對「批次上傳」的名片
-    # 舊有單張掃描/手動新增的名片沒有 batch_id，不在「待確認/已確認」範疇內
     if confirmed is True:
         query = query.filter(CardORM.confirmed_at.isnot(None), CardORM.batch_id.isnot(None))
     elif confirmed is False:
         query = query.filter(CardORM.confirmed_at.is_(None), CardORM.batch_id.isnot(None))
 
-    # 獲取總數
-    total = query.count()
-    
-    # 分頁查詢
-    cards_page = query.order_by(CardORM.created_at.desc()).offset(skip).limit(limit).all()
+    return query
+
+
+def get_cards_paginated(
+    db: Session,
+    skip: int = 0,
+    limit: int = 100,
+    search: Optional[str] = None,
+    industry: Optional[str] = None,
+    filter_status: Optional[str] = None,
+    # 高級篩選參數
+    name_zh: Optional[str] = None,
+    name_en: Optional[str] = None,
+    company: Optional[str] = None,
+    position: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    has_phone: Optional[bool] = None,
+    has_email: Optional[bool] = None,
+    has_address: Optional[bool] = None,
+    confirmed: Optional[bool] = None,
+    with_count: bool = True,
+    with_breakdown: bool = False,
+) -> Tuple[List[dict], int, Optional[Dict[str, int]]]:
+    """分頁獲取名片，支持搜索和過濾。
+    回傳 (cards, total, breakdown)。with_count=False 時 total 回傳 -1（無限捲動的後續頁）。
+    with_breakdown=True 時用同一個 filtered query 跑各產業 GROUP BY，並由各組加總得出 total（省一次 count 掃描）。"""
+    query = db.query(CardORM)
+
+    # 产业分类过滤
+    if industry and industry != '全部':
+        query = query.filter(CardORM.industry_category == industry)
+
+    # search + 高級篩選 + 狀態 + 確認狀態（與產業分布共用）
+    query = _apply_card_filters(
+        query, search=search, filter_status=filter_status,
+        name_zh=name_zh, name_en=name_en, company=company, position=position,
+        date_from=date_from, date_to=date_to,
+        has_phone=has_phone, has_email=has_email, has_address=has_address,
+        confirmed=confirmed,
+    )
+
+    # 產業分布：用同一個 filtered query 跑 GROUP BY；各組加總即為 total，不必再 count() 一次
+    breakdown: Optional[Dict[str, int]] = None
+    if with_breakdown:
+        breakdown = {}
+        for cat, cnt in (
+            query.with_entities(CardORM.industry_category, func.count(CardORM.id))
+            .group_by(CardORM.industry_category)
+            .all()
+        ):
+            breakdown[cat or "未分類"] = int(cnt)
+        total = sum(breakdown.values()) if with_count else -1
+    else:
+        total = query.count() if with_count else -1
+
+    # 分頁查詢 — 列表不需要這些大 Text 欄，延遲載入以縮小回傳量
+    # ponytail: defer 而非 load_only，少維護一份「要哪些欄」清單；新增欄位預設仍會帶回
+    cards_page = (
+        query.options(
+            defer(CardORM.front_ocr_text),
+            defer(CardORM.back_ocr_text),
+            defer(CardORM.front_crop_corners),
+            defer(CardORM.back_crop_corners),
+            # 注意: classification_reason 不 defer — 匯出 (card.py 的 export) 會讀它，且它不大
+        )
+        .order_by(CardORM.created_at.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
 
     # 批次取得重複數量
     group_ids = list(set(c.duplicate_group_id for c in cards_page if c.duplicate_group_id))
@@ -338,160 +340,7 @@ def get_cards_paginated(
 
         result.append(card_dict)
 
-    return result, total
-
-def get_industry_breakdown(
-    db: Session,
-    search: Optional[str] = None,
-    filter_status: Optional[str] = None,
-    # 高級篩選參數
-    name_zh: Optional[str] = None,
-    name_en: Optional[str] = None,
-    company: Optional[str] = None,
-    position: Optional[str] = None,
-    date_from: Optional[str] = None,
-    date_to: Optional[str] = None,
-    has_phone: Optional[bool] = None,
-    has_email: Optional[bool] = None,
-    has_address: Optional[bool] = None,
-    confirmed: Optional[bool] = None,
-) -> Dict[str, int]:
-    """
-    在目前條件（search + status + 高級篩選）下，各 industry_category 的數量
-    """
-    query = db.query(
-        CardORM.industry_category,
-        func.count(CardORM.id)
-    )
-
-    # 搜尋條件（跟 get_cards_paginated 一致）
-    if search:
-        search_filter = or_(
-            CardORM.name_zh.contains(search),
-            CardORM.name_en.contains(search),
-            CardORM.company_name_zh.contains(search),
-            CardORM.company_name_en.contains(search),
-            CardORM.position_zh.contains(search),
-            CardORM.position_en.contains(search),
-            CardORM.position1_zh.contains(search),
-            CardORM.position1_en.contains(search),
-            CardORM.mobile_phone.contains(search),
-            CardORM.email.contains(search),
-            CardORM.classification_reason.contains(search),
-        )
-        query = query.filter(search_filter)
-
-    # === 高級篩選（跟 get_cards_paginated 一致）===
-    if name_zh:
-        query = query.filter(CardORM.name_zh.contains(name_zh))
-    if name_en:
-        query = query.filter(CardORM.name_en.contains(name_en))
-    if company:
-        query = query.filter(or_(
-            CardORM.company_name_zh.contains(company),
-            CardORM.company_name_en.contains(company),
-        ))
-    if position:
-        query = query.filter(or_(
-            CardORM.position_zh.contains(position),
-            CardORM.position_en.contains(position),
-            CardORM.position1_zh.contains(position),
-            CardORM.position1_en.contains(position),
-        ))
-    if date_from:
-        try:
-            dt_from = datetime.datetime.strptime(date_from, "%Y-%m-%d")
-            query = query.filter(CardORM.created_at >= dt_from)
-        except ValueError:
-            pass
-    if date_to:
-        try:
-            dt_to = datetime.datetime.strptime(date_to, "%Y-%m-%d") + datetime.timedelta(days=1)
-            query = query.filter(CardORM.created_at < dt_to)
-        except ValueError:
-            pass
-
-    def is_empty(col):
-        return or_(col.is_(None), col == "")
-    def is_not_empty(col):
-        return and_(col.isnot(None), col != "")
-
-    if has_phone is True:
-        query = query.filter(or_(
-            is_not_empty(CardORM.mobile_phone),
-            is_not_empty(CardORM.company_phone1),
-            is_not_empty(CardORM.company_phone2),
-        ))
-    elif has_phone is False:
-        query = query.filter(and_(
-            is_empty(CardORM.mobile_phone),
-            is_empty(CardORM.company_phone1),
-            is_empty(CardORM.company_phone2),
-        ))
-    if has_email is True:
-        query = query.filter(is_not_empty(CardORM.email))
-    elif has_email is False:
-        query = query.filter(is_empty(CardORM.email))
-    if has_address is True:
-        query = query.filter(or_(
-            is_not_empty(CardORM.company_address1_zh),
-            is_not_empty(CardORM.company_address2_zh),
-        ))
-    elif has_address is False:
-        query = query.filter(and_(
-            is_empty(CardORM.company_address1_zh),
-            is_empty(CardORM.company_address2_zh),
-        ))
-
-    # 狀態條件（跟 get_cards_paginated 一致）
-    if filter_status in ("normal", "problem"):
-        name_missing = and_(is_empty(CardORM.name_zh), is_empty(CardORM.name_en))
-        company_missing = and_(is_empty(CardORM.company_name_zh), is_empty(CardORM.company_name_en))
-
-        position_missing = and_(
-            is_empty(CardORM.position_zh), is_empty(CardORM.position_en),
-            is_empty(CardORM.position1_zh), is_empty(CardORM.position1_en),
-        )
-        department_missing = and_(
-            is_empty(CardORM.department1_zh), is_empty(CardORM.department1_en),
-            is_empty(CardORM.department2_zh), is_empty(CardORM.department2_en),
-            is_empty(CardORM.department3_zh), is_empty(CardORM.department3_en),
-        )
-        position_or_dept_missing = and_(position_missing, department_missing)
-
-        contact_missing = and_(
-            is_empty(CardORM.mobile_phone),
-            is_empty(CardORM.company_phone1),
-            is_empty(CardORM.company_phone2),
-            is_empty(CardORM.email),
-            is_empty(CardORM.line_id),
-        )
-
-        problem_condition = or_(name_missing, company_missing, position_or_dept_missing, contact_missing)
-
-        if filter_status == "problem":
-            query = query.filter(problem_condition)
-        else:
-            query = query.filter(~problem_condition)
-    elif filter_status == "duplicate":
-        query = query.filter(CardORM.duplicate_group_id.isnot(None), CardORM.reviewed_at.is_(None))
-
-    # 確認狀態篩選（與 filter_status 正交）— 僅針對「批次上傳」的名片
-    # 舊有單張掃描/手動新增的名片沒有 batch_id，不在「待確認/已確認」範疇內
-    if confirmed is True:
-        query = query.filter(CardORM.confirmed_at.isnot(None), CardORM.batch_id.isnot(None))
-    elif confirmed is False:
-        query = query.filter(CardORM.confirmed_at.is_(None), CardORM.batch_id.isnot(None))
-
-    query = query.group_by(CardORM.industry_category)
-    rows = query.all()
-
-    breakdown: Dict[str, int] = {}
-    for cat, cnt in rows:
-        key = (cat or "未分類")
-        breakdown[key] = int(cnt)
-
-    return breakdown
+    return result, total, breakdown
 
 def get_card(db: Session, card_id: int) -> dict:
     card = db.query(CardORM).filter(CardORM.id == card_id).first()

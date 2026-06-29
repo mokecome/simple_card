@@ -9,9 +9,7 @@ from backend.services.card_service import (
     delete_card,
     bulk_create_cards,
     get_cards_paginated,
-    get_cards_count,
-    iterate_cards_for_stats,
-    get_industry_breakdown,
+    get_card_stats,
     get_duplicate_groups,
     get_duplicate_group_by_id,
     review_duplicate_group,
@@ -35,9 +33,10 @@ from backend.schemas.card import CardCreate, CardUpdate, CardResponse, Classific
 from backend.schemas.task import BatchClassifyRequest, BatchClassifyResponse, TaskStatusResponse, TaskCancelResponse
 from typing import Dict, List, Optional
 import threading
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, FileResponse
 import csv
 import io
+import hashlib
 import openpyxl
 import logging
 import os
@@ -46,7 +45,7 @@ from backend.services.wcxf_import_service import WcxfImportService
 import shutil
 from datetime import datetime
 import glob
-from PIL import Image
+from PIL import Image, ImageOps
 import base64
 import json
 import tempfile
@@ -252,32 +251,27 @@ def list_cards(
 ):
     try:
         if use_pagination:
-            # 使用分頁查詢（支持产业过滤 + 高級篩選）
-            cards, total = get_cards_paginated(
+            # 只在第一頁算總數與產業分布；後續頁（載入更多）跳過，省整表掃描
+            # 產業分布直接由 get_cards_paginated 用同一個 filtered query 算出（不再二次掃描）
+            first_page = (skip == 0)
+            want_breakdown = first_page and is_all_industry(industry)
+            cards, total, industry_breakdown = get_cards_paginated(
                 db, skip=skip, limit=limit, search=search, industry=industry, filter_status=status,
                 name_zh=name_zh, name_en=name_en, company=company, position=position,
                 date_from=date_from, date_to=date_to,
                 has_phone=has_phone, has_email=has_email, has_address=has_address,
                 confirmed=confirmed,
+                with_count=first_page, with_breakdown=want_breakdown,
             )
-            industry_breakdown = None
-            if is_all_industry(industry):
-                industry_breakdown = get_industry_breakdown(
-                    db,
-                    search=search,
-                    filter_status=status,
-                    name_zh=name_zh, name_en=name_en, company=company, position=position,
-                    date_from=date_from, date_to=date_to,
-                    has_phone=has_phone, has_email=has_email, has_address=has_address,
-                    confirmed=confirmed,
-                )
+            # total=-1（後續頁）時用「這頁是否撈滿」推估還有沒有更多
+            has_more = (skip + len(cards)) < total if total >= 0 else (len(cards) == limit)
             return ResponseHandler.success(
                 data={
                     "items": cards,
                     "total": total,
                     "skip": skip,
                     "limit": limit,
-                    "has_more": (skip + len(cards)) < total,
+                    "has_more": has_more,
                     "industry_breakdown": industry_breakdown
                 },
                 message="獲取名片列表成功"
@@ -307,86 +301,8 @@ def get_cards_stats(db: Session = Depends(get_db), current_user: str = Depends(g
         )
 
     try:
-        def check_card_status_backend(card: Dict[str, Optional[str]]):
-            """後端統計用的狀態檢查邏輯，與前端 checkCardStatus 保持一致"""
-            missing_fields = []
-
-            # 檢查姓名 (中文OR英文)
-            name_zh = (card.get('name_zh') or '').strip()
-            name_en = (card.get('name_en') or '').strip()
-            if not (name_zh or name_en):
-                missing_fields.append('姓名')
-
-            # 檢查公司 (中文OR英文)
-            company_zh = (card.get('company_name_zh') or '').strip()
-            company_en = (card.get('company_name_en') or '').strip()
-            if not (company_zh or company_en):
-                missing_fields.append('公司')
-
-            # 檢查職位或部門 (職位或部門有其中一個即可)
-            position_zh = (card.get('position_zh') or '').strip()
-            position_en = (card.get('position_en') or '').strip()
-            position1_zh = (card.get('position1_zh') or '').strip()
-            position1_en = (card.get('position1_en') or '').strip()
-            has_position = bool(position_zh or position_en or position1_zh or position1_en)
-
-            dept1_zh = (card.get('department1_zh') or '').strip()
-            dept1_en = (card.get('department1_en') or '').strip()
-            dept2_zh = (card.get('department2_zh') or '').strip()
-            dept2_en = (card.get('department2_en') or '').strip()
-            dept3_zh = (card.get('department3_zh') or '').strip()
-            dept3_en = (card.get('department3_en') or '').strip()
-            has_department = bool(dept1_zh or dept1_en or dept2_zh or dept2_en or dept3_zh or dept3_en)
-
-            if not (has_position or has_department):
-                missing_fields.append('職位或部門')
-
-            # 檢查聯絡方式 (手機 OR 公司電話 OR Email OR Line ID，至少要有一個)
-            mobile = (card.get('mobile_phone') or '').strip()
-            phone1 = (card.get('company_phone1') or '').strip()
-            phone2 = (card.get('company_phone2') or '').strip()
-            email = (card.get('email') or '').strip()
-            line_id = (card.get('line_id') or '').strip()
-            if not (mobile or phone1 or phone2 or email or line_id):
-                missing_fields.append('聯絡方式')
-
-            return {
-                'status': 'normal' if len(missing_fields) == 0 else 'problem',
-                'missing_fields': missing_fields,
-                'missing_count': len(missing_fields)
-            }
-
-        total_count = 0
-        normal_count = 0
-        problem_count = 0
-        industry_stats: Dict[str, int] = {}
-
-        for card in iterate_cards_for_stats(db):
-            total_count += 1
-            card_status = check_card_status_backend(card)
-            if card_status['status'] == 'normal':
-                normal_count += 1
-            else:
-                problem_count += 1
-
-            # 統計產業分類
-            industry = (card.get('industry_category') or '').strip()
-            if industry:
-                industry_stats[industry] = industry_stats.get(industry, 0) + 1
-
-        # 待確認名片數：僅統計批次上傳的名片（舊有單張掃描/手動新增的名片 batch_id 為 NULL，不計入）
-        pending_count = db.query(CardORM).filter(
-            CardORM.confirmed_at.is_(None),
-            CardORM.batch_id.isnot(None)
-        ).count()
-
-        stats_data = {
-            'total': total_count,
-            'normal': normal_count,
-            'problem': problem_count,
-            'pending': pending_count,
-            'industry_stats': industry_stats
-        }
+        # 全域統計改用 SQL 聚合（取代逐列 Python 迴圈）；problem 與列表 problem 篩選共用條件
+        stats_data = get_card_stats(db)
 
         cache.set(STATS_CACHE_KEY, stats_data, ttl_minutes=3)
 
@@ -401,6 +317,49 @@ def get_cards_stats(db: Session = Depends(get_db), current_user: str = Depends(g
             message="獲取統計數據失敗",
             error=e
         )
+
+# 縮圖快取目錄與允許的來源根目錄（防路徑穿越）
+# ponytail: 快取無自動清理，上限 ≈ 名片數 × 寬度數；重裁名片會留下舊 mtime 的孤兒檔。
+#           單租戶內部工具規模可接受；若磁碟吃緊，排程 find output/thumb_cache -mtime +30 -delete 即可。
+THUMB_CACHE_DIR = "output/thumb_cache"
+os.makedirs(THUMB_CACHE_DIR, exist_ok=True)
+_THUMB_ROOTS = [os.path.realpath("card_data"), os.path.realpath(UPLOAD_DIR)]
+
+@router.get("/thumb")
+def card_thumbnail(
+    path: str = Query(..., description="名片圖片相對路徑（card_data/... 或 output/card_images/...）"),
+    w: int = Query(240, ge=48, le=800, description="縮圖寬度"),
+):
+    """列表縮圖：即時生成 + 磁碟快取，避免列表一次下載上百張全尺寸原圖。
+    無 auth（與 /static 圖片掛載一致），但限定來源目錄、防路徑穿越。"""
+    src = os.path.realpath(path)
+    if not any(src == root or src.startswith(root + os.sep) for root in _THUMB_ROOTS):
+        raise HTTPException(status_code=400, detail="非法路徑")
+    if not os.path.isfile(src):
+        raise HTTPException(status_code=404, detail="圖片不存在")
+
+    # 快取鍵含 mtime，原圖更新（如重新裁切）會自動失效重生
+    mtime = int(os.path.getmtime(src))
+    key = hashlib.md5(f"{src}|{mtime}|{w}".encode("utf-8")).hexdigest()
+    cache_path = os.path.join(THUMB_CACHE_DIR, f"{key}.jpg")
+
+    if not os.path.exists(cache_path):
+        try:
+            with Image.open(src) as im:
+                im = ImageOps.exif_transpose(im).convert("RGB")
+                im.thumbnail((w, w * 4), Image.LANCZOS)  # 限寬、高度等比
+                tmp = f"{cache_path}.{os.getpid()}.tmp"
+                im.save(tmp, "JPEG", quality=82)
+                os.replace(tmp, cache_path)  # 原子寫入，避免併發讀到半截檔
+        except Exception as e:
+            logger.warning(f"縮圖生成失敗，退回原圖 {src}: {e}")
+            return FileResponse(src)
+
+    return FileResponse(
+        cache_path,
+        media_type="image/jpeg",
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
 
 @router.post("/crop-preview")
 async def crop_preview(
@@ -1117,8 +1076,9 @@ def export_cards(
                       or date_from or date_to
                       or has_phone is not None or has_email is not None or has_address is not None)
         if has_filter:
-            cards, total = get_cards_paginated(
-                db, skip=0, limit=999999,
+            # 匯出不需要 total（只用 len(cards)），跳過整表 count 掃描
+            cards, _total, _ = get_cards_paginated(
+                db, skip=0, limit=999999, with_count=False,
                 search=search,
                 industry=industry if industry and industry != '全部' else None,
                 filter_status=status if status and status != 'all' else None,

@@ -63,24 +63,34 @@ class OCRService:
 
 重要：請從實際圖片內容中提取真實資訊，絕對不要使用下方範例中的數據。
 
+⚠️ 防止捏造規則（最高優先，凌駕其他指示）：
+- 只填入你在圖片上實際看到的文字；看得到就填（即使可能看錯也沒關係）。
+- 看不清楚、被遮擋、或圖片上根本沒有的欄位，該欄請留空字串 ""。
+- 嚴禁編造、猜測或填入範例性質／佔位資料（例如「李明 / Lee Ming」、lee.ming@example.com、000-000-0000 之類）。
+- 不要從英文姓名反推中文姓名，也不要從中文反推英文；圖片上沒有就留空。
+- 原則：辨識得到就填，辨識不到就留空，但絕不無中生有。
+- 禁止重複填寫：address2、department2、department3、position1 這類「第二組」欄位，只有名片上真的有第二個「不同」的地址／部門／職位時才填；若只有一個，第二組一律留空 ""，嚴禁把第一組的內容複製過去。同一個地址用韓/中/英多種寫法呈現時，只算「一個」地址。
+
+🌐 語言規則：以 _zh 結尾的欄位請填入名片上「主要的非英文文字」——可能是中文、日文或韓文，名片上是哪種文字就照填哪種，不要翻譯或音譯。以 _en 結尾的欄位只填拉丁字母/英文。
+
 請仔細識別以下25個欄位（如果某個欄位在名片上沒有找到，請設為空字符串）：
 
 【個人資訊】(8個欄位)
-- 姓名（中文）
+- 姓名（當地語言，中文/日文/韓文照實填）
 - 姓名（英文）
-- 職位（中文）
+- 職位（當地語言，中文/日文/韓文照實填）
 - 職位（英文）
-- 職位1（中文）
+- 職位1（當地語言，中文/日文/韓文照實填）
 - 職位1（英文）
-- 公司名稱（中文）
+- 公司名稱（當地語言，中文/日文/韓文照實填）
 - 公司名稱（英文）
 
 【部門組織架構】(6個欄位)
-- 部門1（中文）
+- 部門1（當地語言，中文/日文/韓文照實填）
 - 部門1（英文）
-- 部門2（中文）
+- 部門2（當地語言，中文/日文/韓文照實填）
 - 部門2（英文）
-- 部門3（中文）
+- 部門3（當地語言，中文/日文/韓文照實填）
 - 部門3（英文）
 
 【聯絡方式】(5個欄位)
@@ -91,9 +101,9 @@ class OCRService:
 - Line ID
 
 【地址資訊】(4個欄位)
-- 公司地址1（中文）
+- 公司地址1（當地語言，中文/日文/韓文照實填）
 - 公司地址1（英文）
-- 公司地址2（中文）
+- 公司地址2（當地語言，中文/日文/韓文照實填）
 - 公司地址2（英文）
 
 【備註資訊】(2個欄位)
@@ -103,28 +113,28 @@ class OCRService:
 請嚴格按照以下JSON格式返回，使用正確的欄位名稱，填入從圖片中實際識別到的內容：
 
 {
-  "name_zh": "[從圖片識別的中文姓名]",
+  "name_zh": "[照抄名片上當地語言（中/日/韓，諺文就填諺文）的姓名]",
   "name_en": "[從圖片識別的英文姓名]",
-  "company_name_zh": "[從圖片識別的中文公司名稱]",
+  "company_name_zh": "[照抄名片上當地語言（中/日/韓，諺文就填諺文）的公司名稱]",
   "company_name_en": "[從圖片識別的英文公司名稱]",
-  "position_zh": "[從圖片識別的中文職位]",
+  "position_zh": "[照抄名片上當地語言（中/日/韓，諺文就填諺文）的職位]",
   "position_en": "[從圖片識別的英文職位]",
-  "position1_zh": "[從圖片識別的中文職位1]",
+  "position1_zh": "[照抄名片上當地語言（中/日/韓，諺文就填諺文）的職位1]",
   "position1_en": "[從圖片識別的英文職位1]",
-  "department1_zh": "[從圖片識別的中文部門1]",
+  "department1_zh": "[照抄名片上當地語言（中/日/韓，諺文就填諺文）的部門1]",
   "department1_en": "[從圖片識別的英文部門1]",
-  "department2_zh": "[從圖片識別的中文部門2]",
+  "department2_zh": "[照抄名片上當地語言（中/日/韓，諺文就填諺文）的部門2]",
   "department2_en": "[從圖片識別的英文部門2]",
-  "department3_zh": "[從圖片識別的中文部門3]",
+  "department3_zh": "[照抄名片上當地語言（中/日/韓，諺文就填諺文）的部門3]",
   "department3_en": "[從圖片識別的英文部門3]",
   "mobile_phone": "[從圖片識別的手機號碼]",
   "company_phone1": "[從圖片識別的公司電話1]",
   "company_phone2": "[從圖片識別的公司電話2]",
   "email": "[從圖片識別的電子郵件]",
   "line_id": "[從圖片識別的Line ID]",
-  "company_address1_zh": "[從圖片識別的中文地址1]",
+  "company_address1_zh": "[照抄名片上當地語言（中/日/韓，諺文就填諺文）的地址1]",
   "company_address1_en": "[從圖片識別的英文地址1]",
-  "company_address2_zh": "[從圖片識別的中文地址2]",
+  "company_address2_zh": "[照抄名片上當地語言（中/日/韓，諺文就填諺文）的地址2]",
   "company_address2_en": "[從圖片識別的英文地址2]",
   "note1": "[從圖片識別的備註1]",
   "note2": "[從圖片識別的備註2]"
@@ -217,31 +227,40 @@ class OCRService:
 
 IMPORTANT: Extract actual information from the OCR text provided. Do NOT use the placeholder examples below.
 
+ANTI-FABRICATION RULES (highest priority, override anything else):
+- Only fill a field with text that actually appears in the OCR text; if it is there, fill it in (an imperfect reading is OK).
+- For any field that is missing or unreadable in the OCR text, return an empty string "".
+- NEVER invent, guess, or insert example/placeholder values for name, company, email, phone, or address (e.g. "李明 / Lee Ming", lee.ming@example.com, 000-000-0000).
+- Do not derive a Chinese name from an English one or vice versa.
+- Principle: extract what is present, leave the rest empty, but never make anything up.
+
+LANGUAGE RULE: Fields ending in _zh hold the card's PRIMARY non-English script — this may be Chinese, Japanese, or Korean; put whichever script appears on the card, without translating or transliterating. Fields ending in _en hold Latin/English only.
+
 Please identify the following 25 fields from the OCR text (set empty string if not found):
 
 {
-  "name_zh": "[Actual Chinese name from OCR]",
+  "name_zh": "[Native-script — Chinese/Japanese/Korean, copy exactly as shown, do NOT transliterate — name from OCR]",
   "name_en": "[Actual English name from OCR]", 
-  "company_name_zh": "[Actual Chinese company name from OCR]",
+  "company_name_zh": "[Native-script — Chinese/Japanese/Korean, copy exactly as shown, do NOT transliterate — company name from OCR]",
   "company_name_en": "[Actual English company name from OCR]",
-  "position_zh": "[Actual Chinese position from OCR]",
+  "position_zh": "[Native-script — Chinese/Japanese/Korean, copy exactly as shown, do NOT transliterate — position from OCR]",
   "position_en": "[Actual English position from OCR]",
-  "position1_zh": "[Actual Chinese position1 from OCR]", 
+  "position1_zh": "[Native-script — Chinese/Japanese/Korean, copy exactly as shown, do NOT transliterate — position1 from OCR]", 
   "position1_en": "[Actual English position1 from OCR]",
-  "department1_zh": "[Actual Chinese department1 from OCR]",
+  "department1_zh": "[Native-script — Chinese/Japanese/Korean, copy exactly as shown, do NOT transliterate — department1 from OCR]",
   "department1_en": "[Actual English department1 from OCR]",
-  "department2_zh": "[Actual Chinese department2 from OCR]", 
+  "department2_zh": "[Native-script — Chinese/Japanese/Korean, copy exactly as shown, do NOT transliterate — department2 from OCR]", 
   "department2_en": "[Actual English department2 from OCR]",
-  "department3_zh": "[Actual Chinese department3 from OCR]",
+  "department3_zh": "[Native-script — Chinese/Japanese/Korean, copy exactly as shown, do NOT transliterate — department3 from OCR]",
   "department3_en": "[Actual English department3 from OCR]", 
   "mobile_phone": "[Actual mobile phone from OCR]",
   "company_phone1": "[Actual company phone1 from OCR]",
   "company_phone2": "[Actual company phone2 from OCR]",
   "email": "[Actual email from OCR]",
   "line_id": "[Actual Line ID from OCR]",
-  "company_address1_zh": "[Actual Chinese address1 from OCR]",
+  "company_address1_zh": "[Native-script — Chinese/Japanese/Korean, copy exactly as shown, do NOT transliterate — address1 from OCR]",
   "company_address1_en": "[Actual English address1 from OCR]", 
-  "company_address2_zh": "[Actual Chinese address2 from OCR]",
+  "company_address2_zh": "[Native-script — Chinese/Japanese/Korean, copy exactly as shown, do NOT transliterate — address2 from OCR]",
   "company_address2_en": "[Actual English address2 from OCR]",
   "note1": "[Actual note1 from OCR]",
   "note2": "[Actual note2 from OCR]"
@@ -310,16 +329,31 @@ Please parse the following OCR text and return only JSON format: ''' + ocr_text
         log_entry = f"[{timestamp}] {message}"
         print(log_entry)
     
+    def is_native_cjk(self, char):
+        """Check if char belongs to a native (non-Latin) business-card script:
+        CJK ideographs (Chinese / Japanese kanji), kana, and Korean hangul.
+        Used to keep _zh fields holding zh/ja/ko text instead of only Chinese."""
+        return ('\u4e00' <= char <= '\u9fff'    # CJK Unified Ideographs (\u4e2d\u6587 + \u65e5\u6587\u6f22\u5b57)
+                or '\u3040' <= char <= '\u30ff'  # Hiragana + Katakana
+                or '\uff66' <= char <= '\uff9f'  # Halfwidth Katakana
+                or '\uac00' <= char <= '\ud7a3'  # Hangul syllables (\u97d3\u6587)
+                or '\u1100' <= char <= '\u11ff') # Hangul Jamo
+
     def is_chinese(self, char):
-        """Check if character is Chinese"""
-        return '\u4e00' <= char <= '\u9fff'
-    
+        """Deprecated alias kept for compatibility; now matches any native CJK script."""
+        return self.is_native_cjk(char)
+
     def filter_data(self, merged_data):
-        """Filter field content, Chinese fields only Chinese, English fields only English/symbols"""
+        """Filter field content: native-script (_zh) fields keep only CJK/kana/hangul,
+        English (_en) fields strip those scripts. _zh now holds zh/ja/ko (auto-detected)."""
         
-        # No need to filter these fields: contact info and notes
-        ignore_filter = ["mobile_phone", "company_phone1", "company_phone2", "email", "line_id", "note1", "note2"]
-        
+        # No need to filter these fields: contact info, notes, and addresses.
+        # 地址含門牌號/樓層數字與「-、之」等符號，整段保留不過濾，否則 7號5樓 會被吃成 號樓
+        ignore_filter = [
+            "mobile_phone", "company_phone1", "company_phone2", "email", "line_id", "note1", "note2",
+            "company_address1_zh", "company_address2_zh",
+        ]
+
         # English field identifiers
         en_identifiers = ("_en",)
 
@@ -331,12 +365,15 @@ Please parse the following OCR text and return only JSON format: ''' + ocr_text
                 continue
 
             if any(id in key for id in en_identifiers):
-                # English fields: remove Chinese characters
-                filtered_result[key] = "".join(c for c in str(value) if not self.is_chinese(c)).strip()
+                # English fields: remove native CJK/kana/hangul characters
+                filtered_result[key] = "".join(c for c in str(value) if not self.is_native_cjk(c)).strip()
             else:
-                # Chinese fields: keep only Chinese characters
-                filtered_result[key] = "".join(c for c in str(value) if self.is_chinese(c)).strip()
-                
+                # Native-script fields: keep CJK/kana/hangul (zh/ja/ko) + 數字 + 空白
+                # 保留數字才不會吃掉「104人力銀行」「職位3」等含數字的中文欄位；純英文詞仍會被剔到 _en
+                filtered_result[key] = "".join(
+                    c for c in str(value) if self.is_native_cjk(c) or c.isdigit() or c.isspace()
+                ).strip()
+
         return filtered_result
     
     def batch_ocr_image(self, image_path, max_retries=3):
@@ -832,12 +869,17 @@ class LLMApi:
         self.model_path = model_path
         self.base_url = os.getenv("OCR_API_URL", "http://0.0.0.0:23333/v1")
         self.api_key = os.getenv("OCR_API_KEY", "YOUR_API_KEY")
-        self.timeout = 45.0
+        # 讀取逾時與生成上限（可由 .env 調整）
+        # timeout: 後端等待模型 server 回應的秒數，逾時即放棄該請求
+        self.timeout = float(os.getenv("OCR_TIMEOUT", "30"))
+        # max_tokens: 單次生成的 token 上限，防止貪婪解碼陷入重複迴圈導致無限長輸出
+        # 一張完整 25 欄位 JSON 約 220 token，1024 已有約 5 倍餘裕
+        self.max_tokens = int(os.getenv("OCR_MAX_TOKENS", "1024"))
         self._model_name = None
         self.client = OpenAI(
             api_key=self.api_key,
             base_url=self.base_url,
-            timeout=60.0,
+            timeout=self.timeout,
             max_retries=1
         )
 
@@ -876,7 +918,8 @@ class LLMApi:
                 payload = {
                     "model": model_name,
                     "messages": [{"role": "user", "content": content}],
-                    "temperature": 0
+                    "temperature": 0,
+                    "max_tokens": self.max_tokens
                 }
 
                 async with httpx.AsyncClient(timeout=httpx.Timeout(self.timeout)) as client:
@@ -943,7 +986,8 @@ class LLMApi:
                     model=model_name,
                     messages=[{'role': 'user', 'content': content}],
                     temperature=0,
-                    timeout=45.0
+                    max_tokens=self.max_tokens,
+                    timeout=self.timeout
                 )
 
                 result = response.choices[0].message.content
@@ -1123,31 +1167,40 @@ async def api_card(file: UploadFile = File(...)):
 
 IMPORTANT: Extract actual information from the business card image. Do NOT use the placeholder examples below.
 
+ANTI-FABRICATION RULES (highest priority, override anything else):
+- Only fill a field with text you can actually see in the image; if you can read it, fill it in (an imperfect reading is OK).
+- For any field that is unclear, occluded, or not present in the image, return an empty string "".
+- NEVER invent, guess, or insert example/placeholder values for name, company, email, phone, or address (e.g. "李明 / Lee Ming", lee.ming@example.com, 000-000-0000).
+- Do not derive a Chinese name from an English one or vice versa.
+- Principle: read what you can, leave the rest empty, but never make anything up.
+
+LANGUAGE RULE: Fields ending in _zh hold the card's PRIMARY non-English script — this may be Chinese, Japanese, or Korean; put whichever script appears on the card, without translating or transliterating. Fields ending in _en hold Latin/English only.
+
 Please identify the following 25 fields from the business card (set empty string if not found):
 
 {
-  "name_zh": "[Actual Chinese name from card]",
+  "name_zh": "[Native-script — Chinese/Japanese/Korean, copy exactly as shown, do NOT transliterate — name from card]",
   "name_en": "[Actual English name from card]", 
-  "company_name_zh": "[Actual Chinese company name from card]",
+  "company_name_zh": "[Native-script — Chinese/Japanese/Korean, copy exactly as shown, do NOT transliterate — company name from card]",
   "company_name_en": "[Actual English company name from card]",
-  "position_zh": "[Actual Chinese position from card]",
+  "position_zh": "[Native-script — Chinese/Japanese/Korean, copy exactly as shown, do NOT transliterate — position from card]",
   "position_en": "[Actual English position from card]",
-  "position1_zh": "[Actual Chinese position1 from card]", 
+  "position1_zh": "[Native-script — Chinese/Japanese/Korean, copy exactly as shown, do NOT transliterate — position1 from card]", 
   "position1_en": "[Actual English position1 from card]",
-  "department1_zh": "[Actual Chinese department1 from card]",
+  "department1_zh": "[Native-script — Chinese/Japanese/Korean, copy exactly as shown, do NOT transliterate — department1 from card]",
   "department1_en": "[Actual English department1 from card]",
-  "department2_zh": "[Actual Chinese department2 from card]", 
+  "department2_zh": "[Native-script — Chinese/Japanese/Korean, copy exactly as shown, do NOT transliterate — department2 from card]", 
   "department2_en": "[Actual English department2 from card]",
-  "department3_zh": "[Actual Chinese department3 from card]",
+  "department3_zh": "[Native-script — Chinese/Japanese/Korean, copy exactly as shown, do NOT transliterate — department3 from card]",
   "department3_en": "[Actual English department3 from card]", 
   "mobile_phone": "[Actual mobile phone from card]",
   "company_phone1": "[Actual company phone1 from card]",
   "company_phone2": "[Actual company phone2 from card]",
   "email": "[Actual email from card]",
   "line_id": "[Actual Line ID from card]",
-  "company_address1_zh": "[Actual Chinese address1 from card]",
+  "company_address1_zh": "[Native-script — Chinese/Japanese/Korean, copy exactly as shown, do NOT transliterate — address1 from card]",
   "company_address1_en": "[Actual English address1 from card]", 
-  "company_address2_zh": "[Actual Chinese address2 from card]",
+  "company_address2_zh": "[Native-script — Chinese/Japanese/Korean, copy exactly as shown, do NOT transliterate — address2 from card]",
   "company_address2_en": "[Actual English address2 from card]",
   "note1": "[Actual note1 from card]",
   "note2": "[Actual note2 from card]"
